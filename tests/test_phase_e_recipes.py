@@ -16,9 +16,11 @@ SUPPORTED_RECIPES = {
     "hyperagents",
     "hyperagents_codex",
     "hyperagents_codex_tbench_full",
+    "hyperagents_dsh",
     "hyperagents_tbench_full",
 }
 UV_SOURCE_RECIPES = {"ahe", "hill_climb", "hyperagents", "hyperagents_tbench_full"}
+LOCAL_MUTATE_RECIPES = {"hyperagents_dsh"}
 MAIN_RECIPES = SUPPORTED_RECIPES - {"gepa_local"}
 TERMINAL_BENCH_DATASET = "terminal-bench-2-30-v1"
 CODEX_IMAGE = "evolve-mutate-codex:20260818-codex0146"
@@ -43,10 +45,15 @@ def test_main_recipes_share_terminal_bench_and_explicit_mutate_images() -> None:
         config = _parsed_config(name)
         expected_dataset = "terminal-bench@2.0" if name.endswith("_tbench_full") else TERMINAL_BENCH_DATASET
         assert config["evaluator"]["dataset"] == expected_dataset
+        mutate = _operator_config(name, "mutate")
+        if name in LOCAL_MUTATE_RECIPES:
+            assert mutate["runner"] == "local"
+            assert "image" not in mutate
+            continue
         expected_image = MINISWE_IMAGE if name in {"hyperagents_tbench_full"} else CODEX_IMAGE
         if name == "hyperagents_codex_tbench_full":
             expected_image = CODEX_FULL_IMAGE
-        assert _operator_config(name, "mutate")["image"] == expected_image
+        assert mutate["image"] == expected_image
 
 
 def test_all_recipes_are_recipe_artifacts_only() -> None:
@@ -164,6 +171,15 @@ def test_supported_recipes_use_harbor_and_method_mutate() -> None:
             "gate": "parent_eligible",
             "record": "hyperagents",
         },
+        "hyperagents_dsh": {
+            "select": "score_child_prop",
+            "rollout": "parent_evaluation",
+            "analyze": "trace_browser",
+            "mutate": "hyperagents",
+            "validate": "node_check",
+            "gate": "parent_eligible",
+            "record": "hyperagents",
+        },
         "hyperagents_tbench_full": {
             "select": "score_child_prop",
             "rollout": "parent_evaluation",
@@ -206,12 +222,17 @@ def test_supported_recipes_use_harbor_and_method_mutate() -> None:
                 if name == "hyperagents_tbench_full"
                 else "codex"
             )
+        elif name == "hyperagents_dsh":
+            assert config["target"]["seed"] == "builtin-dsh"
+            assert mutate["runner"] == "local"
+            assert mutate["command"] == "python3 target/runners/mutate_local.py"
+            assert "agent" not in mutate
         else:
             assert mutate["agent"] == "codex"
 
 
 def test_codex_mutates_use_the_preinstalled_codex_image() -> None:
-    for name in MAIN_RECIPES - {"hyperagents_tbench_full"}:
+    for name in MAIN_RECIPES - {"hyperagents_tbench_full"} - LOCAL_MUTATE_RECIPES:
         expected = CODEX_FULL_IMAGE if name == "hyperagents_codex_tbench_full" else CODEX_IMAGE
         assert _operator_config(name, "mutate")["image"] == expected
 
@@ -221,6 +242,7 @@ def test_terminal_bench_method_recipes_use_full_curated_dataset() -> None:
         "ahe": TERMINAL_BENCH_DATASET,
         "hyperagents": TERMINAL_BENCH_DATASET,
         "hyperagents_codex": TERMINAL_BENCH_DATASET,
+        "hyperagents_dsh": TERMINAL_BENCH_DATASET,
     }
     for name, expected_dataset in expected_datasets.items():
         recipe = _parsed_config(name)
@@ -437,7 +459,7 @@ def test_hyperagents_recipe_configures_reasoning_without_cost_caps() -> None:
 
 
 def test_benchmark_mutators_use_codex_xhigh() -> None:
-    for name in MAIN_RECIPES - {"hyperagents_tbench_full", "hyperagents_codex_tbench_full"}:
+    for name in MAIN_RECIPES - {"hyperagents_tbench_full", "hyperagents_codex_tbench_full"} - LOCAL_MUTATE_RECIPES:
         mutate = _operator_config(name, "mutate")
         assert mutate["agent"] == "codex"
         assert mutate["model"] == "gpt-5.4"
@@ -452,6 +474,7 @@ def test_recipe_retry_and_partial_floor_defaults_remain_method_specific() -> Non
         "hyperagents",
         "hyperagents_codex",
         "hyperagents_codex_tbench_full",
+        "hyperagents_dsh",
         "hyperagents_tbench_full",
     ):
         evaluator = _parsed_config(name)["evaluator"]

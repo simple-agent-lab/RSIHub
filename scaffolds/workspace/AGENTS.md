@@ -22,7 +22,9 @@ Any newly introduced Python package must be added to the workspace root
 `pyproject.toml` with `uv add`, and the resulting `uv.lock` must be committed.
 Harbor trials run from the locked workspace environment: never rely on a package
 installed globally, injected through `PYTHONPATH`, or installed ad hoc during a
-trial.
+trial. Packages that are not on PyPI (for example the DeepSeek Harness SDK used
+by `hyperagents_dsh`) must be added from a local clone path with `uv add
+/path/to/clone/...`, never substituted with an unrelated PyPI name.
 
 ## Python runtime and uv cache
 
