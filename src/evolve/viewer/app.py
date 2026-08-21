@@ -25,6 +25,15 @@ from .snapshot import add_snapshot_warning, build_snapshot
 
 MAX_ARTIFACT_PREVIEW_BYTES = 1024 * 1024
 _ACTION_PATH = re.compile(r"^/api/jobs/[^/]+/upload/?$")
+_READ_ONLY_HARBOR_CHROME = b"""<style>
+.evolve-readonly-hidden{display:none!important}
+</style><script>
+(()=>{const hide=()=>document.querySelectorAll('a,button').forEach((element)=>{
+const text=(element.textContent||'').trim();
+if(element.matches('a[href$="/run"]')||text==='New run'||text.startsWith('Sign in')){
+element.classList.add('evolve-readonly-hidden');element.setAttribute('aria-hidden','true');element.tabIndex=-1;
+}});new MutationObserver(hide).observe(document.documentElement,{childList:true,subtree:true});hide();})();
+</script>"""
 
 
 class SnapshotStore:
@@ -357,6 +366,8 @@ async def _prefix_harbor_response(response: Response, root_path: str) -> Respons
     body = body.replace(b"/fonts/", prefix + b"/fonts/")
     body = body.replace(b'"basename":"/"', b'"basename":"' + prefix + b'/"')
     body = body.replace(b'const b=""', b'const b="' + prefix + b'"')
+    if "text/html" in content_type:
+        body = _hide_harbor_write_controls(body)
     headers = dict(response.headers)
     for name in ("content-length", "etag", "last-modified"):
         headers.pop(name, None)
@@ -366,6 +377,11 @@ async def _prefix_harbor_response(response: Response, root_path: str) -> Respons
         headers=headers,
         background=response.background,
     )
+
+
+def _hide_harbor_write_controls(body: bytes) -> bytes:
+    marker = b"</body>"
+    return body.replace(marker, _READ_ONLY_HARBOR_CHROME + marker, 1) if marker in body else body
 
 
 def _canonical_tasks(

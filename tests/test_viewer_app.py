@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from evolve.git import git
-from evolve.viewer.app import create_viewer_app
+from evolve.viewer.app import _hide_harbor_write_controls, create_viewer_app
 
 
 @pytest.fixture
@@ -54,6 +54,15 @@ def test_snapshot_and_generation_routes(viewer_workspace: Path) -> None:
         assert client.get("/api/evolve/snapshot").status_code == 200
         assert client.get("/api/evolve/generations/1").json()["summary"]["genid"] == "1"
         assert client.get("/api/evolve/generations/missing").status_code == 404
+
+
+def test_harbor_shell_hides_write_only_header_actions() -> None:
+    shell = _hide_harbor_write_controls(b"<html><body><main></main></body></html>")
+
+    assert b"MutationObserver" in shell
+    assert b"text==='New run'" in shell
+    assert b"text.startsWith('Sign in')" in shell
+    assert shell.endswith(b"</body></html>")
 
 
 def test_generation_diff_adds_bounded_parent_context(viewer_workspace: Path) -> None:
