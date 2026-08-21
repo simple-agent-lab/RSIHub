@@ -6,7 +6,6 @@ import socket
 import threading
 from collections.abc import Iterable, Mapping
 from contextlib import asynccontextmanager
-from dataclasses import replace
 from pathlib import Path
 from typing import Any, cast
 
@@ -29,10 +28,9 @@ _ACTION_PATH = re.compile(r"^/api/jobs/[^/]+/upload/?$")
 
 
 class SnapshotStore:
-    def __init__(self, reader: WorkspaceReader, bridge: HarborBridge, *, display_name: str | None = None):
+    def __init__(self, reader: WorkspaceReader, bridge: HarborBridge):
         self.reader = reader
         self.bridge = bridge
-        self.display_name = display_name
         self._last: SnapshotBundle | None = None
         self._lock = threading.RLock()
 
@@ -42,12 +40,7 @@ class SnapshotStore:
                 sources = self.reader.refresh()
                 tasks = _canonical_tasks(sources)
                 federation = self.bridge.refresh(sources.job_roots, canonical_tasks=tasks)
-                bundle = build_snapshot(sources, harbor_links=federation.trial_links)
-                if self.display_name is not None:
-                    experiment = bundle.snapshot.experiment.model_copy(update={"id": self.display_name})
-                    snapshot = bundle.snapshot.model_copy(update={"experiment": experiment})
-                    bundle = replace(bundle, snapshot=snapshot)
-                self._last = bundle
+                self._last = build_snapshot(sources, harbor_links=federation.trial_links)
             except Exception as exc:
                 if self._last is None:
                     raise
@@ -56,15 +49,10 @@ class SnapshotStore:
             return self._last
 
 
-def create_viewer_app(
-    workspace: Path,
-    *,
-    bridge: HarborBridge | None = None,
-    display_name: str | None = None,
-) -> FastAPI:
+def create_viewer_app(workspace: Path, *, bridge: HarborBridge | None = None) -> FastAPI:
     workspace = workspace.resolve()
     active_bridge = (bridge or HarborBridge(workspace)).__enter__()
-    store = SnapshotStore(WorkspaceReader(workspace), active_bridge, display_name=display_name)
+    store = SnapshotStore(WorkspaceReader(workspace), active_bridge)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -254,7 +242,7 @@ def create_catalog_app(entries: Iterable[ViewerWorkspace]) -> FastAPI:
     workspaces = tuple(entries)
     if not workspaces:
         raise ValueError("viewer catalog must contain at least one experiment")
-    children = [(entry, create_viewer_app(entry.workspace, display_name=entry.label)) for entry in workspaces]
+    children = [(entry, create_viewer_app(entry.workspace)) for entry in workspaces]
     readers = {entry.slug: WorkspaceReader(entry.workspace) for entry in workspaces}
 
     @asynccontextmanager
