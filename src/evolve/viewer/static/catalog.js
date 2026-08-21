@@ -88,13 +88,13 @@ function renderFilters() {
 }
 
 function experimentCard(row) {
-  if (row.error) return `<article class="experiment-card"><div class="card-heading"><div><p class="card-kicker">${escapeHtml(row.entry.agent || 'Agent')}</p><h4>${escapeHtml(row.entry.method || row.entry.label)}</h4></div><span class="status-mark failed">Unavailable</span></div><p class="error-note">${escapeHtml(row.error)}</p><div class="card-footer"><span>${escapeHtml(row.entry.workspace)}</span></div></article>`;
+  if (row.error) return `<article class="experiment-card"><div class="card-heading"><div><p class="card-kicker">${escapeHtml(row.entry.agent || 'Agent')}</p><h4>${escapeHtml(row.entry.label)}</h4></div><span class="status-mark failed">Unavailable</span></div><p class="error-note">${escapeHtml(row.error)}</p><div class="card-footer"><span>${escapeHtml(row.entry.workspace)}</span></div></article>`;
   const health = row.snapshot.experiment.health;
   const delta = row.seed?.score != null && row.champion?.score != null ? row.champion.score - row.seed.score : null;
   const rejected = row.generations.filter((item) => item.score == null || item.status.includes('rejected') || item.status.includes('failed')).length;
   return `<a class="experiment-card" href="${escapeHtml(row.entry.url)}">
     <div class="card-heading">
-      <div><p class="card-kicker">${escapeHtml(row.entry.agent || 'Target agent')} · ${escapeHtml(row.entry.selection_metric || 'Selection score')}</p><h4>${escapeHtml(row.entry.method || row.entry.label)}</h4></div>
+      <div><p class="card-kicker">${escapeHtml(row.entry.selection_metric || 'Selection score')} selection</p><h4>${escapeHtml(row.entry.label)}</h4></div>
       <span class="status-mark ${escapeHtml(health)}">${escapeHtml(health.replaceAll('_', ' '))}</span>
     </div>
     <div class="score-row">
