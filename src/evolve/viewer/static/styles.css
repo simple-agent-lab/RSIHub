@@ -43,6 +43,9 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .primary-nav a:hover { background: rgb(255 255 255 / 6%); }
 .primary-nav a.active { color: white; background: #294238; }
 .primary-nav a.active span { color: #88deb7; }
+.catalog-return { display: flex; align-items: center; gap: 10px; margin-top: 18px; padding: 10px 12px; color: var(--rail-muted); border-top: 1px solid rgb(255 255 255 / 9%); font-size: 12px; text-decoration: none; }
+.catalog-return:hover { color: white; }
+.catalog-return[hidden] { display: none; }
 .rail-footer { margin-top: auto; padding: 16px 8px 0; border-top: 1px solid rgb(255 255 255 / 9%); }
 .rail-footer p { margin: 6px 0 0 18px; color: #819188; font-size: 11px; }
 .live-dot { display: flex; align-items: center; gap: 9px; color: var(--rail-muted); font-size: 12px; }
@@ -268,6 +271,7 @@ main.diff-mode .artifact-preview { height: clamp(360px, calc(100vh - 360px), 660
   .app-shell { display: block; padding-bottom: 64px; }
   .rail { position: fixed; z-index: 10; top: auto; bottom: 0; width: 100%; height: 64px; padding: 7px 12px; box-shadow: 0 -4px 18px rgb(0 0 0 / 12%); }
   .brand, .rail-footer { display: none; }.primary-nav { grid-template-columns: repeat(3, 1fr); margin: 0; }
+  .catalog-return { display: none; }
   .primary-nav a { flex-direction: column; gap: 2px; padding: 6px; font-size: 10px; }.primary-nav a span { font-size: 16px; }
   .topbar { min-height: 70px; padding: 13px 18px; }.refresh-status { display: none; }
   main { padding: 24px 16px 45px; }.page-heading { align-items: start; flex-direction: column; }.page-heading h2 { font-size: 24px; }

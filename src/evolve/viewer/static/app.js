@@ -16,6 +16,8 @@ const experimentName = document.querySelector('#experiment-name');
 const healthPill = document.querySelector('#health-pill');
 const refreshStatus = document.querySelector('#refresh-status');
 const ROOT_PATH = (document.querySelector('meta[name="evolve-root"]')?.content || '').replace(/\/$/, '');
+const catalogReturn = document.querySelector('#catalog-return');
+if (catalogReturn && ROOT_PATH.startsWith('/experiments/')) catalogReturn.hidden = false;
 
 const mountedUrl = (value) => {
   const url = String(value || '');

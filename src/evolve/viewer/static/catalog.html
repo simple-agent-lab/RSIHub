@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light">
-    <title>RSIHub evolution atlas</title>
+    <title>RSIHub experiment catalog</title>
     <link rel="stylesheet" href="/catalog-assets/catalog.css">
   </head>
   <body>
@@ -13,8 +13,11 @@
       <aside class="catalog-rail" aria-label="Catalog filters">
         <a class="catalog-brand" href="/">
           <img src="/catalog-assets/rsihub-mark.svg" alt="">
-          <span><strong>RSIHub</strong><small>Evolution atlas</small></span>
+          <span><strong>RSIHub</strong><small>Experiment viewer</small></span>
         </a>
+        <nav class="catalog-nav" aria-label="Catalog navigation">
+          <a class="active" href="/"><span aria-hidden="true">⌂</span>Experiments</a>
+        </nav>
         <div class="filter-block">
           <p class="filter-label">Target agent</p>
           <div id="agent-filters" class="filter-list" role="group" aria-label="Target agent"></div>
@@ -35,20 +38,27 @@
       <div class="catalog-workspace">
         <header class="catalog-header">
           <div>
-            <p class="eyebrow">Tau3 Banking · evolutionary runs</p>
-            <h1>Seed to champion, generation by generation.</h1>
-            <p class="dek">Compare eight experiment lineages, then open any workspace to replay its accepted changes and inspect task evidence.</p>
+            <p class="eyebrow">Tau3 Banking</p>
+            <h1>Evolution experiments</h1>
           </div>
           <div class="header-actions">
-            <label class="search-field">
-              <span>Find experiment</span>
-              <input id="catalog-search" type="search" placeholder="Method, agent, workspace" autocomplete="off">
-            </label>
             <span id="refresh-state" class="refresh-state" aria-live="polite">Connecting</span>
+            <span id="workspace-count" class="status-pill complete">Workspaces</span>
           </div>
         </header>
 
         <main id="catalog-content" tabindex="-1">
+          <section class="catalog-intro">
+            <div>
+              <p class="eyebrow">Experiment catalog</p>
+              <h2>Seed to champion, generation by generation</h2>
+              <p class="dek">Compare eight experiment lineages, then open any workspace to replay its accepted changes and inspect task evidence.</p>
+            </div>
+            <label class="search-field">
+              <span>Find experiment</span>
+              <input id="catalog-search" type="search" placeholder="Method, agent, workspace" autocomplete="off">
+            </label>
+          </section>
           <section id="catalog-summary" class="summary-strip" aria-label="Catalog summary"></section>
           <section class="lineage-intro">
             <div>

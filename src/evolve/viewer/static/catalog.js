@@ -148,6 +148,7 @@ async function refresh() {
       const row = bySlug.get(entry.slug);
       return derive(entry, row?.snapshot || null, row?.error || (row ? null : 'Snapshot missing'));
     });
+    document.querySelector('#workspace-count').textContent = `${state.rows.length} workspaces`;
     renderSummary(state.rows);
     renderFilters();
     renderGroups();
