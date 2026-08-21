@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from types import TracebackType
+from typing import cast
 from urllib.parse import quote
 
 from harbor.viewer.scanner import JobScanner
@@ -72,6 +73,7 @@ class HarborBridge:
                 temporary = root / f".{name}.next"
                 _remove_path(temporary)
                 shutil.copytree(target, temporary, copy_function=_link_or_copy)
+                _normalize_copied_job(temporary)
                 os.replace(temporary, destination)
         expected = {name for name, _target in desired.values()}
         for entry in root.iterdir():
@@ -131,6 +133,42 @@ def _link_or_copy(source: str, destination: str) -> str:
         return destination
     except OSError:
         return shutil.copy2(source, destination)
+
+
+def _normalize_copied_job(job: Path) -> None:
+    """Make retained writable-mount evidence readable by current Harbor models.
+
+    Historical RSIHub trials can truthfully record writable cache mounts, while
+    Harbor 0.18 accepts only read-only mounts when loading results in its viewer.
+    The bridge changes only its disposable copy: replacing a normalized JSON
+    file also breaks the hard link, leaving the experiment evidence untouched.
+    """
+    for trial in job.iterdir():
+        if not trial.is_dir():
+            continue
+        for filename, nested in (("config.json", False), ("result.json", True)):
+            path = trial / filename
+            document = _json_object(path)
+            config = document.get("config") if nested else document
+            if not _mark_mounts_read_only(config):
+                continue
+            temporary = path.with_name(f".{filename}.viewer-normalized")
+            temporary.write_text(json.dumps(document, separators=(",", ":")))
+            os.replace(temporary, path)
+
+
+def _mark_mounts_read_only(value: object) -> bool:
+    if not isinstance(value, dict):
+        return False
+    environment = value.get("environment")
+    mounts = environment.get("mounts") if isinstance(environment, dict) else None
+    changed = False
+    if isinstance(mounts, list):
+        for mount in mounts:
+            if isinstance(mount, dict) and mount.get("read_only") is False:
+                cast(dict[str, object], mount)["read_only"] = True
+                changed = True
+    return changed
 
 
 def _remove_path(path: Path) -> None:

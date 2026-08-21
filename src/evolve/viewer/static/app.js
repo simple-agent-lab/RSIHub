@@ -778,7 +778,7 @@ async function renderTrials(params) {
   content.innerHTML = `
     <div class="page-heading"><div><h2>Trials</h2><p>Canonical outcomes with direct access to full Harbor inspection.</p></div><div class="page-actions"><a class="button" data-evolve-link href="${backHref}">← ${backLabel}</a></div></div>
     <section class="card">
-      <form id="trial-filters" class="filters">
+      <form id="trial-filters" class="filters trial-filters">
         <div class="field"><label for="filter-generation">Generation</label><select id="filter-generation" name="generation"><option value="">All generations</option>${generations.map((generation) => `<option value="${escapeHtml(generation.genid)}" ${params.get('generation') === generation.genid ? 'selected' : ''}>${escapeHtml(generation.genid)}</option>`).join('')}</select></div>
         <div class="field"><label for="filter-purpose">Purpose</label><select id="filter-purpose" name="purpose"><option value="">All purposes</option>${['candidate', 'genesis', 'rollout', 'anchor'].map((purpose) => `<option ${params.get('purpose') === purpose ? 'selected' : ''}>${purpose}</option>`).join('')}</select></div>
         <div class="field"><label for="filter-status">Status</label><select id="filter-status" name="status"><option value="">All statuses</option>${['complete', 'benchmark_complete', 'error', 'unknown'].map((status) => `<option ${params.get('status') === status ? 'selected' : ''}>${status}</option>`).join('')}</select></div>
@@ -796,8 +796,8 @@ async function renderTrials(params) {
 
 function trialTable(trials) {
   if (!trials.length) return '<div class="empty"><strong>No trials match these filters</strong>Clear one or more filters to widen the result.</div>';
-  return `<div class="table-wrap"><table><thead><tr><th>Task</th><th>Generation</th><th>Purpose</th><th>Status</th><th class="numeric">Reward</th><th class="numeric">Duration</th><th>Inspection</th></tr></thead><tbody>${trials.map((trial) => `<tr>
-    <td><span class="mono">${escapeHtml(trial.task)}</span><div class="subtle">Repetition ${trial.repetition}</div></td><td><a class="row-link" data-evolve-link href="/generations/${encodeURIComponent(trial.generation)}">${escapeHtml(trial.generation)}</a></td><td>${escapeHtml(label(trial.purpose))}</td><td>${badge(trial.status)}</td><td class="numeric">${number(trial.reward)}</td><td class="numeric">${trial.duration_ms == null ? '—' : `${number(trial.duration_ms / 1000, 2)}s`}</td><td>${trial.harbor_url ? `<a class="button" href="${escapeHtml(mountedUrl(trial.harbor_url))}">Full Harbor inspection</a>` : '<span class="subtle">Not linked</span>'}</td>
+  return `<div class="table-wrap trial-table"><table><thead><tr><th>Task</th><th>Generation</th><th>Purpose</th><th>Status</th><th class="numeric">Reward</th><th class="numeric">Duration</th><th>Inspection</th></tr></thead><tbody>${trials.map((trial) => `<tr>
+    <td><span class="mono trial-task">${escapeHtml(trial.task)}</span><div class="subtle trial-repetition">Repetition ${trial.repetition}</div></td><td><a class="row-link" data-evolve-link href="/generations/${encodeURIComponent(trial.generation)}">${escapeHtml(trial.generation)}</a></td><td>${escapeHtml(label(trial.purpose))}</td><td>${badge(trial.status)}</td><td class="numeric">${number(trial.reward)}</td><td class="numeric">${trial.duration_ms == null ? '—' : `${number(trial.duration_ms / 1000, 2)}s`}</td><td>${trial.harbor_url ? `<a class="button inspection-button" target="_blank" rel="noopener" href="${escapeHtml(mountedUrl(trial.harbor_url))}">Full Harbor inspection <span aria-hidden="true">↗</span></a>` : '<span class="subtle">Not linked</span>'}</td>
   </tr>`).join('')}</tbody></table></div>`;
 }
 

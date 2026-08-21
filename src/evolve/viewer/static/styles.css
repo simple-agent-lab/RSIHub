@@ -241,9 +241,22 @@ main.diff-mode .artifact-preview { height: clamp(360px, calc(100vh - 360px), 660
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .filters { display: grid; grid-template-columns: repeat(4, minmax(130px, 1fr)) auto; gap: 10px; margin-bottom: 16px; }
 .field label { display: block; margin: 0 0 5px; color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; }
-.field input, .field select { width: 100%; height: 36px; padding: 0 10px; color: var(--ink); background: white; border: 1px solid var(--line-strong); border-radius: 7px; outline: none; }
+.field input, .field select { width: 100%; height: 36px; padding: 0 10px; color: var(--ink); background: white; border: 1px solid var(--line-strong); border-radius: 7px; font-size: 12px; outline: none; }
 .field input:focus, .field select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .filter-action { align-self: end; }
+.trial-filters { grid-template-columns: minmax(128px, .75fr) minmax(140px, .85fr) minmax(150px, .9fr) minmax(220px, 1.5fr) auto; gap: 12px; padding: 14px; background: var(--canvas); border: 1px solid var(--line); border-radius: 10px; }
+.trial-filters .field label { margin-bottom: 6px; color: var(--subtle); font-size: 9px; letter-spacing: .06em; }
+.trial-filters .field input, .trial-filters .field select { height: 38px; background-color: white; border-radius: 9px; font-size: 12px; font-weight: 600; }
+.trial-filters .field select { appearance: none; padding: 0 34px 0 11px; background-image: linear-gradient(45deg, transparent 50%, #74827b 50%), linear-gradient(135deg, #74827b 50%, transparent 50%); background-position: calc(100% - 16px) 16px, calc(100% - 11px) 16px; background-repeat: no-repeat; background-size: 5px 5px, 5px 5px; cursor: pointer; }
+.trial-filters .field select:hover, .trial-filters .field input:hover { border-color: #aebbb4; }
+.trial-filters .filter-action .button { min-height: 38px; padding-inline: 16px; font-size: 11px; }
+.trial-table table { font-size: 11px; }
+.trial-table th { font-size: 9px; }
+.trial-table td { padding-block: 10px; }
+.trial-task { font-size: 10.5px; }
+.trial-repetition { margin-top: 3px; font-size: 9px; }
+.inspection-button { min-height: 30px; padding-inline: 10px; font-size: 10px; white-space: nowrap; }
+.inspection-button span { color: var(--subtle); font-size: 11px; }
 .pagination { display: flex; align-items: center; justify-content: space-between; margin-top: 14px; color: var(--muted); font-size: 11px; }
 .pagination div { display: flex; gap: 7px; }
 .detail-meta { display: flex; flex-wrap: wrap; gap: 20px; margin-top: 12px; color: var(--muted); font-size: 12px; }

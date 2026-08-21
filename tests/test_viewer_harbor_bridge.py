@@ -131,6 +131,9 @@ def test_bridge_links_legacy_trials_rejected_by_current_harbor_models(tmp_path: 
     """Old writable-mount configs remain inspectable even when Harbor 0.18 rejects them."""
     jobs = _harbor_jobs(tmp_path / "jobs", "legacy-job", task="suite__task-a")
     trial = jobs / "legacy-job/trial-0"
+    legacy_config = json.loads((trial / "config.json").read_text())
+    legacy_config["environment"] = {"mounts": [{"read_only": False}]}
+    (trial / "config.json").write_text(json.dumps(legacy_config))
     (trial / "result.json").write_text(
         json.dumps(
             {
@@ -153,11 +156,20 @@ def test_bridge_links_legacy_trials_rejected_by_current_harbor_models(tmp_path: 
             [JobRootReference(generation="5", purpose="candidate", path=jobs)],
             canonical_tasks={("5", "candidate"): ("suite__task-a",)},
         )
+        copied_job = next(federation.root.iterdir())
+        copied_result = json.loads((copied_job / "trial-0/result.json").read_text())
+        copied_config = json.loads((copied_job / "trial-0/config.json").read_text())
 
     link = federation.trial_links[("5", "candidate", "suite__task-a", 0)]
     assert link.reward == 0.75
     assert link.duration_ms == 2500
     assert "/legacy-source/legacy-agent/openai/legacy-model/" in link.url
+    assert copied_result["config"]["environment"]["mounts"][0]["read_only"] is True
+    assert copied_config["environment"]["mounts"][0]["read_only"] is True
+    source_result = json.loads((trial / "result.json").read_text())
+    source_config = json.loads((trial / "config.json").read_text())
+    assert source_result["config"]["environment"]["mounts"][0]["read_only"] is False
+    assert source_config["environment"]["mounts"][0]["read_only"] is False
 
 
 def test_bridge_counts_repetitions_per_task_not_per_job(tmp_path: Path) -> None:
