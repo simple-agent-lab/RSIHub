@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <meta name="evolve-root" content="__EVOLVE_ROOT__">
+    <title>RSIHub experiment viewer</title>
+    <link rel="stylesheet" href="__EVOLVE_ROOT__/evolve-assets/vendor/diff2html.min.css">
+    <link rel="stylesheet" href="__EVOLVE_ROOT__/evolve-assets/vendor/highlight-github.min.css">
+    <link rel="stylesheet" href="__EVOLVE_ROOT__/evolve-assets/styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#viewer-content">Skip to experiment content</a>
+    <div id="evolve-viewer" class="app-shell">
+      <aside class="rail" aria-label="Experiment navigation">
+        <a class="brand" href="__EVOLVE_ROOT__/" data-evolve-link>
+          <img class="brand-logo" src="__EVOLVE_ROOT__/evolve-assets/rsihub-mark.svg" alt="">
+          <span><strong>RSIHub</strong><small>Experiment viewer</small></span>
+        </a>
+        <nav class="primary-nav">
+          <a href="__EVOLVE_ROOT__/" data-evolve-link data-nav="overview"><span aria-hidden="true">⌂</span>Overview</a>
+          <a href="__EVOLVE_ROOT__/generations" data-evolve-link data-nav="generations"><span aria-hidden="true">⑂</span>Generations</a>
+          <a href="__EVOLVE_ROOT__/trials" data-evolve-link data-nav="trials"><span aria-hidden="true">≡</span>Trials</a>
+        </nav>
+        <div class="rail-footer">
+          <div class="live-dot"><span aria-hidden="true"></span>Live filesystem view</div>
+          <p>Refreshes every 3 seconds</p>
+        </div>
+      </aside>
+      <div class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Experiment</p>
+            <h1 id="experiment-name">Loading workspace…</h1>
+          </div>
+          <div class="topbar-meta">
+            <span id="refresh-status" class="refresh-status" aria-live="polite">Connecting</span>
+            <span id="health-pill" class="status-pill neutral">Unknown</span>
+          </div>
+        </header>
+        <main id="viewer-content" tabindex="-1">
+          <section class="loading-card" aria-busy="true">
+            <span class="spinner" aria-hidden="true"></span>
+            <div><strong>Reading experiment artifacts</strong><p>Building the first consistent snapshot.</p></div>
+          </section>
+        </main>
+      </div>
+    </div>
+    <script src="__EVOLVE_ROOT__/evolve-assets/vendor/diff2html.min.js"></script>
+    <script src="__EVOLVE_ROOT__/evolve-assets/vendor/highlight.min.js"></script>
+    <script type="module" src="__EVOLVE_ROOT__/evolve-assets/app.js"></script>
+  </body>
+</html>

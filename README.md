@@ -109,6 +109,41 @@ bindings and `./evolve operator run ...` for direct stage orchestration. See
 Each recipe declares its mutable paths. Evaluators, archive stamps, and the
 vendored framework mechanism stay outside that surface.
 
+## Browse an Experiment
+
+`evolve view` serves a read-only view of one generated workspace, or a unified
+index of related workspaces with `--catalog`. It shows current experiment
+health, generation progress, modifications, canonical performance, and
+paginated trial outcomes. When a workspace retains Harbor jobs, linked trial
+rows open Harbor's full trajectory, logs, verifier output, and artifacts on the
+same server.
+
+For a workspace on DevBox, start the viewer there:
+
+```bash
+# On DevBox
+evolve view /data00/home/$USER/experiments/my-run
+```
+
+The command binds to `127.0.0.1`, chooses the first free port from `8080-8089`,
+and prints the matching tunnel command. On the laptop, use the selected port
+(for example, `8080`):
+
+```bash
+# On the laptop
+ssh -N -L 8080:127.0.0.1:8080 DevBox
+# Then open http://127.0.0.1:8080
+```
+
+The RSIHub pages poll filesystem summaries every three seconds and do not offer
+run, delete, upload, summarize, or authentication actions. This is a local
+inspection tool, not an authorization boundary: anyone who can access the
+listener or SSH tunnel can view the raw Harbor artifacts exposed by that
+workspace. Keep the default loopback binding and restrict tunnel access.
+
+See the [experiment viewer guide](docs/guides/experiment-viewer.md) for page behavior,
+artifact previews, Harbor inspection, and troubleshooting.
+
 ## Recipes
 
 | Choose this when you want to… | Recipe | Mutable surface |
@@ -333,6 +368,7 @@ Working on or with RSIHub from a coding agent? Start here:
 | [Analyze](docs/reference/operators/analyze.md) | Trace retention and analysis operators. |
 | [Local environment](docs/guides/local-environment.md) | Docker-free trusted local execution. |
 | [Operations](docs/guides/operations.md) | Doctor profiles, runtime setup, full-loop smoke, and recovery. |
+| [Experiment viewer](docs/guides/experiment-viewer.md) | Read-only experiment inspection, DevBox tunnels, and Harbor drill-down. |
 | [Contributing](CONTRIBUTING.md) | Development setup and repository conventions. |
 | [Releasing](RELEASING.md) | Source, artifact, and publication checklist. |
 

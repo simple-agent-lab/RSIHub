@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import tempfile
 import uuid
+from collections.abc import Iterable
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -244,12 +245,16 @@ def eval_receipt_path(archive: Path) -> Path:
 
 
 def merged_rows(path: Path) -> list[dict[str, Any]]:
+    return merge_events(read_events(path), receipts=_eval_receipts(path))
+
+
+def merge_events(events: Iterable[dict[str, Any]], *, receipts: set[str] | None = None) -> list[dict[str, Any]]:
     rows: dict[str, dict[str, Any]] = {}
     evals_by_genid: dict[str, dict[str, dict[str, Any]]] = {}
     top_eval_hash: dict[str, str] = {}
-    receipts = _eval_receipts(path)
+    receipts = receipts or set()
     order: list[str] = []
-    for raw_event in read_events(path):
+    for raw_event in events:
         event = {key: value for key, value in raw_event.items() if key != RECEIPT_CERTIFIED_FIELD}
         genid = str(event["genid"])
         if genid not in rows:

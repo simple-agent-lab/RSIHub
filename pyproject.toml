@@ -19,10 +19,13 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
+    "fastapi>=0.128.0",
     "harbor==0.18.0",
+    "pydantic>=2",
     "python-dotenv>=1.0",
     "PyYAML>=6.0",
     "typer>=0.12",
+    "uvicorn>=0.38.0",
 ]
 
 [project.urls]
