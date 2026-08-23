@@ -522,7 +522,7 @@ def test_miniswe_wrapper_subclasses_harbor_miniswe_and_installs_candidate_source
     assert issubclass(module.MiniSweSourceAgent, base)
     assert not environment.uploaded_directories
     assert environment.uploaded_archive_destination == "/tmp/evolve-miniswe-source.tar"
-    assert environment.uploads[1] == (host_uv, "/tmp/evolve-uv")
+    assert environment.uploads[1] == (host_uv, "/tmp/evolve-runtime-uv")
     assert environment.archive_modes["./pyproject.toml"] == 0o600
     assert environment.archive_modes["./src"] == 0o700
     assert not (environment.archive_modes["./pyproject.toml"] & stat.S_IWOTH)
@@ -539,14 +539,15 @@ def test_miniswe_wrapper_subclasses_harbor_miniswe_and_installs_candidate_source
     bootstrap = environment.commands[1]
     assert "apt-get" not in joined
     assert "apk add" not in joined
-    assert 'cp /tmp/evolve-uv "$HOME/.local/bin/uv"' in joined
-    assert bootstrap.index("if ! command -v uv") < bootstrap.index('cp /tmp/evolve-uv "$HOME/.local/bin/uv"')
-    assert '"$HOME/.local/bin/uv" --version' in joined
-    assert 'rm -f "$HOME/.local/bin/uv"' in joined
+    assert "if [ ! -f /tmp/evolve-runtime-uv ]" in bootstrap
+    assert "chmod 700 /tmp/evolve-runtime-uv" in bootstrap
+    assert "/tmp/evolve-runtime-uv --version > /tmp/evolve-runtime-uv.version" in bootstrap
+    assert "command -v uv" not in bootstrap
+    assert '"$HOME/.local/bin/uv"' not in joined
     assert "uv tool install" not in joined
     assert "mini-swe-agent --" not in joined
-    assert "curl -LsSf https://astral.sh/uv/0.7.13/install.sh" in joined
-    assert "uv sync --project /installed-agent/miniswe-source --frozen" in joined
+    assert "curl" not in bootstrap
+    assert "/tmp/evolve-runtime-uv sync --project /installed-agent/miniswe-source --frozen" in joined
     assert "/installed-agent/miniswe-source/.venv/bin/python" in joined
     assert "uv run --project /installed-agent/miniswe-source" not in joined
     assert "from minisweagent.agents.default import DefaultAgent" in joined
@@ -554,7 +555,7 @@ def test_miniswe_wrapper_subclasses_harbor_miniswe_and_installs_candidate_source
     assert len(sync_indices) == 2
     assert "--no-install-local" in environment.commands[sync_indices[0]]
     assert "--no-install-local" not in environment.commands[sync_indices[1]]
-    assert 'export PATH="$HOME/.local/bin:$PATH"' in environment.commands[sync_indices[0]]
+    assert 'export PATH="$HOME/.local/bin:$PATH"' not in environment.commands[sync_indices[0]]
     expected_proxy_env = {
         "http_proxy": "http://dependency-proxy.example:8118",
         "HTTPS_PROXY": "http://dependency-proxy.example:8118",
@@ -580,9 +581,14 @@ def test_miniswe_wrapper_subclasses_harbor_miniswe_and_installs_candidate_source
     assert '"frozen_sync": true' in environment.commands[evidence_index]
     assert '"miniswe_import": true' in environment.commands[evidence_index]
     assert '"model_path_init": true' in environment.commands[evidence_index]
+    assert "/tmp/evolve-runtime-uv.version" in environment.commands[evidence_index]
+    assert "hashlib.sha256" in environment.commands[evidence_index]
+    assert "/tmp/evolve-runtime-uv" in environment.commands[evidence_index]
     assert "skills_loaded" in environment.commands[evidence_index]
     assert "memories_loaded" in environment.commands[evidence_index]
     assert "context_chars" in environment.commands[evidence_index]
+    assert environment.commands[evidence_index + 1] == ("rm -f /tmp/evolve-runtime-uv /tmp/evolve-runtime-uv.version")
+    assert environment.envs[evidence_index + 1] == {}
     assert expected_proxy_env.items() <= environment.envs[model_index].items()
     assert environment.envs[model_index]["OPENAI_API_KEY"] == "test-key"
     assert environment.envs[model_index]["OPENAI_BASE_URL"] == "https://llm.example/v1"
@@ -764,7 +770,32 @@ def test_miniswe_external_dependency_sync_is_infrastructure_owned(tmp_path: Path
     assert str(raised.value) == ("EVOLVE_RUNTIME_INFRASTRUCTURE: external_dependency_sync_failed: offline cache miss")
 
 
-def test_miniswe_offline_runtime_never_downloads_uv(tmp_path: Path, monkeypatch) -> None:
+def test_miniswe_local_sync_offline_cache_miss_is_infrastructure_owned(tmp_path: Path, monkeypatch) -> None:
+    _install_fake_harbor(monkeypatch)
+    target = write_locked_miniswe_seed(tmp_path / "target")
+    module = _load(ADAPTER)
+    monkeypatch.setenv("EVOLVE_CANDIDATE_SOURCE", str(target))
+
+    class Environment:
+        def __init__(self) -> None:
+            self.commands = []
+            self.envs = []
+            self.uploads = []
+            self.fail_on = "local uv sync"
+            self.failure = RuntimeError(
+                "Network connectivity is disabled, but the requested data wasn't found in the cache"
+            )
+
+        async def upload_file(self, source_path, target_path):
+            self.uploads.append((Path(source_path), target_path))
+
+    with pytest.raises(module.EvolveRuntimeInfrastructureError) as raised:
+        asyncio.run(module.MiniSweSourceAgent().install(Environment()))
+
+    assert str(raised.value).startswith("EVOLVE_RUNTIME_INFRASTRUCTURE: local_project_sync_failed:")
+
+
+def test_miniswe_runtime_requires_a_host_uv_without_touching_task_image(tmp_path: Path, monkeypatch) -> None:
     _install_fake_harbor(monkeypatch)
     target = write_locked_miniswe_seed(tmp_path / "target")
     module = _load(ADAPTER)
@@ -778,10 +809,6 @@ def test_miniswe_offline_runtime_never_downloads_uv(tmp_path: Path, monkeypatch)
             self.commands = []
             self.envs = []
             self.uploads = []
-            self.fail_on = "EVOLVE_UV_BOOTSTRAP_MISSING"
-
-        async def upload_dir(self, source_dir, target_dir):
-            self.uploads.append((Path(source_dir), target_dir))
 
         async def upload_file(self, source_path, target_path):
             self.uploads.append((Path(source_path), target_path))
@@ -789,13 +816,12 @@ def test_miniswe_offline_runtime_never_downloads_uv(tmp_path: Path, monkeypatch)
     environment = Environment()
     with pytest.raises(
         module.EvolveRuntimeInfrastructureError,
-        match="EVOLVE_RUNTIME_INFRASTRUCTURE: uv_bootstrap_failed",
+        match="EVOLVE_RUNTIME_INFRASTRUCTURE: uv_bootstrap_failed: host uv binary missing",
     ):
         asyncio.run(module.MiniSweSourceAgent().install(environment))
 
-    bootstrap = next(command for command in environment.commands if "EVOLVE_UV_BOOTSTRAP_MISSING" in command)
-    assert "curl" not in bootstrap
-    assert "unset HTTP_PROXY" not in bootstrap
+    assert environment.commands == []
+    assert environment.uploads == []
 
 
 def test_miniswe_install_rejects_missing_lock_before_upload(tmp_path: Path, monkeypatch) -> None:

@@ -48,6 +48,7 @@ def test_harbor_evaluator_uses_locked_workspace_runtime() -> None:
     assert 'python "$PWD/.evolve/launch_splits.py"' in text
     assert 'harbor "$@"' in text
     assert '"$PWD/.evolve/launch_splits.py"' in text
+    assert "export EVOLVE_UV_BINARY" in text
 
 
 def test_harbor_score_parser_uses_framework_python(tmp_path: Path) -> None:
@@ -535,6 +536,8 @@ def test_harbor_evaluator_prefers_explicit_agent_proxy_over_ambient_proxy(
     args = args_capture.read_text().splitlines()
     agent_environment = [args[index + 1] for index, value in enumerate(args) if value == "--ae"]
     verifier_environment = [args[index + 1] for index, value in enumerate(args) if value == "--ve"]
+    assert not any(entry.startswith("EVOLVE_UV_BINARY=") for entry in agent_environment)
+    assert not any(entry.startswith("EVOLVE_UV_BINARY=") for entry in verifier_environment)
     expected = "172.17.0.1,127.0.0.1,localhost,model.example"
     assert [value for value in agent_environment if value.startswith("NO_PROXY=")][-1] == f"NO_PROXY={expected}"
     assert [value for value in agent_environment if value.startswith("no_proxy=")][-1] == f"no_proxy={expected}"

@@ -35,6 +35,11 @@ fi
 : "${EVOLVE_FRAMEWORK_PYTHON:=$(command -v python3)}"
 if [ -n "${EVOLVE_UV_BINARY:-}" ]; then UV=$EVOLVE_UV_BINARY; else UV=$(command -v uv || true); fi
 [ -n "$UV" ] && [ -x "$UV" ] || { printf 'uv is required; install uv or set EVOLVE_UV_BINARY\n' >&2; printf 'infra_failed\n' > "$EVOLVE_RUN_DIR/status"; exit 3; }
+# Keep candidate-runtime preparation and the Harbor adapter on the same host uv.
+# This is deliberately not forwarded with --ae: the task image's uv and PATH
+# remain part of the benchmark environment.
+EVOLVE_UV_BINARY=$UV
+export EVOLVE_UV_BINARY
 if [ "${EVOLVE_HARBOR_ENVIRONMENT:-docker}" = "docker" ] && [ -z "${DOCKER_HOST:-}" ]; then
   resolved_docker_host=$(
     "$EVOLVE_FRAMEWORK_PYTHON" -m evolve.execution_runtime.command docker-host 2>/dev/null || true

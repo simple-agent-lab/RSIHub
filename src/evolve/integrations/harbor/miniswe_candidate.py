@@ -17,7 +17,8 @@ RUNNER_PATH = "/tmp/miniswe-source-run.py"
 TASK_PATH = "/tmp/miniswe-source-task.txt"
 LOG_PATH = "/logs/agent/mini-swe-agent.txt"
 RUNTIME_EVIDENCE_PATH = "/logs/agent/evolve-runtime.json"
-HOST_UV_PATH = "/tmp/evolve-uv"
+RUNTIME_UV_PATH = "/tmp/evolve-runtime-uv"
+RUNTIME_UV_VERSION_PATH = "/tmp/evolve-runtime-uv.version"
 SOURCE_ARCHIVE_PATH = "/tmp/evolve-miniswe-source.tar"
 TAU3_MCP_CLI_PATH = "/tmp/tau3-mcp.py"
 TAU3_BANKING_MCP_CLI_HINT = (
@@ -26,6 +27,11 @@ TAU3_BANKING_MCP_CLI_HINT = (
     f"and `{VENV_PYTHON} {TAU3_MCP_CLI_PATH} call TOOL_NAME 'JSON_ARGUMENTS'` to call one."
 )
 PROXY_ENV_NAMES = ("HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy")
+OFFLINE_CACHE_MISS_MARKERS = (
+    "network connectivity is disabled",
+    "requested data wasn't found in the cache",
+    "offline cache miss",
+)
 
 
 class EvolveCandidateInvalidError(RuntimeError):
@@ -306,14 +312,17 @@ class CandidateMiniSweAgent(MiniSweAgent):
             raise EvolveCandidateInvalidError("EVOLVE_CANDIDATE_INVALID: lock_missing")
         if not ((source_dir / "src" / "minisweagent").is_dir() or (source_dir / "minisweagent").is_dir()):
             raise EvolveCandidateInvalidError("EVOLVE_CANDIDATE_INVALID: source_missing")
+        host_uv = self._host_uv_binary()
+        if host_uv is None:
+            raise EvolveRuntimeInfrastructureError(
+                "EVOLVE_RUNTIME_INFRASTRUCTURE: uv_bootstrap_failed: host uv binary missing"
+            )
         try:
             with candidate_source_archive(source_dir) as archive_path:
                 await environment.upload_file(archive_path, SOURCE_ARCHIVE_PATH)
         except UnsafeCandidateSourceError as error:
             raise EvolveCandidateInvalidError("EVOLVE_CANDIDATE_INVALID: unsafe_source_tree") from error
-        host_uv = self._host_uv_binary()
-        if host_uv is not None:
-            await environment.upload_file(host_uv, HOST_UV_PATH)
+        await environment.upload_file(host_uv, RUNTIME_UV_PATH)
         install_env = self._install_env()
         await self._runtime_phase(
             environment,
@@ -325,49 +334,27 @@ class CandidateMiniSweAgent(MiniSweAgent):
             code="source_extract_failed",
             env=install_env,
         )
-        offline_runtime = self._get_env("UV_OFFLINE") == "1"
-        missing_uv = (
-            'printf "EVOLVE_UV_BOOTSTRAP_MISSING\\n" >&2; false; '
-            if offline_runtime
-            else "curl -LsSf https://astral.sh/uv/0.7.13/install.sh | sh; "
-        )
         await self._runtime_phase(
             environment,
             command=(
                 "set -euo pipefail; "
-                'mkdir -p "$HOME/.local/bin"; export PATH="$HOME/.local/bin:$PATH"; '
-                "if ! command -v uv >/dev/null 2>&1 || ! uv --version >/dev/null 2>&1; then "
-                f"if [ -f {HOST_UV_PATH} ]; then "
-                f'cp {HOST_UV_PATH} "$HOME/.local/bin/uv"; chmod 755 "$HOME/.local/bin/uv"; '
-                'if ! "$HOME/.local/bin/uv" --version >/dev/null 2>&1; then rm -f "$HOME/.local/bin/uv"; fi; '
-                "fi; "
-                "fi; "
-                "if ! command -v uv >/dev/null 2>&1 || ! uv --version >/dev/null 2>&1; then "
-                'rm -f "$HOME/.local/bin/uv"; '
-                f"{missing_uv}"
-                "fi; "
-                'if [ -f "$HOME/.local/bin/env" ]; then . "$HOME/.local/bin/env"; '
-                'else export PATH="$HOME/.local/bin:$PATH"; fi; '
-                "uv --version >/dev/null"
+                f"if [ ! -f {RUNTIME_UV_PATH} ]; then "
+                'printf "EVOLVE_UV_BOOTSTRAP_MISSING\\n" >&2; false; fi; '
+                f"chmod 700 {RUNTIME_UV_PATH}; "
+                f"{RUNTIME_UV_PATH} --version > {RUNTIME_UV_VERSION_PATH}"
             ),
             code="uv_bootstrap_failed",
             env=install_env,
         )
         await self._runtime_phase(
             environment,
-            "set -euo pipefail; "
-            'if [ -f "$HOME/.local/bin/env" ]; then . "$HOME/.local/bin/env"; '
-            'else export PATH="$HOME/.local/bin:$PATH"; fi; '
-            f"uv sync --project {SOURCE_DIR} --frozen --no-install-local --offline",
+            f"set -euo pipefail; {RUNTIME_UV_PATH} sync --project {SOURCE_DIR} --frozen --no-install-local --offline",
             "external_dependency_sync_failed",
             env=install_env,
         )
         await self._candidate_phase(
             environment,
-            "set -euo pipefail; "
-            'if [ -f "$HOME/.local/bin/env" ]; then . "$HOME/.local/bin/env"; '
-            'else export PATH="$HOME/.local/bin:$PATH"; fi; '
-            f"uv sync --project {SOURCE_DIR} --frozen --offline",
+            f"set -euo pipefail; {RUNTIME_UV_PATH} sync --project {SOURCE_DIR} --frozen --offline",
             "local_project_sync_failed",
             env=install_env,
         )
@@ -389,11 +376,19 @@ class CandidateMiniSweAgent(MiniSweAgent):
             command=self._runtime_evidence_command(),
             env=self._source_env(),
         )
+        await self._runtime_phase(
+            environment,
+            command=f"rm -f {RUNTIME_UV_PATH} {RUNTIME_UV_VERSION_PATH}",
+            code="uv_cleanup_failed",
+            env={},
+        )
 
     async def _candidate_phase(self, environment, command: str, code: str, *, env: dict[str, str]) -> None:
         try:
             await self.exec_as_agent(environment, command=command, env=env)
-        except Exception:
+        except Exception as error:
+            if any(marker in str(error).lower() for marker in OFFLINE_CACHE_MISS_MARKERS):
+                raise EvolveRuntimeInfrastructureError(f"EVOLVE_RUNTIME_INFRASTRUCTURE: {code}: {error}") from None
             raise EvolveCandidateInvalidError(f"EVOLVE_CANDIDATE_INVALID: {code}") from None
 
     async def _runtime_phase(self, environment, command: str, code: str, *, env: dict[str, str]) -> None:
@@ -418,12 +413,16 @@ class CandidateMiniSweAgent(MiniSweAgent):
             sort_keys=True,
         )
         script = (
-            EVOLVED_CONTEXT_SETUP
+            "import hashlib\n"
+            + EVOLVED_CONTEXT_SETUP
             + "\n"
             + f"context, stats = _load_evolved_context({SOURCE_DIR!r})\n"
             + f"payload = json.loads({payload!r})\n"
             + "payload.update(stats)\n"
             + "payload['context_chars'] = len(context)\n"
+            + f"payload['uv'] = {{'path': {RUNTIME_UV_PATH!r}, "
+            + f"'version': Path({RUNTIME_UV_VERSION_PATH!r}).read_text().strip(), "
+            + f"'sha256': hashlib.sha256(Path({RUNTIME_UV_PATH!r}).read_bytes()).hexdigest()}}\n"
             + f"Path({RUNTIME_EVIDENCE_PATH!r}).write_text(json.dumps(payload, sort_keys=True) + '\\n')"
         )
         return f"mkdir -p /logs/agent; {VENV_PYTHON} -c {shlex.quote(script)}"

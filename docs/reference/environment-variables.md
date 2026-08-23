@@ -136,11 +136,17 @@ experiment state:
 | `EVOLVE_HOME` | archive mirrors and framework-level state |
 | `EVOLVE_UV_CACHE_DIR` | persistent cache shared by evaluator and candidate runtime preparation |
 | `EVOLVE_UV_PYTHON_INSTALL_DIR` | Python installations used by managed runtime preparation |
-| `EVOLVE_UV_BINARY` | explicit path to the `uv` executable |
+| `EVOLVE_UV_BINARY` | explicit path to the isolated `uv` executable used to prepare and install candidate runtimes |
 | `UV_CACHE_DIR` | cache used by direct host-side `uv` commands |
 | `TMPDIR` | host temporary-file location |
 
-Use absolute paths and keep them stable when resuming the same workspace.
+Use absolute paths and keep them stable when resuming the same workspace. The
+candidate-runtime adapter uploads the resolved host `uv` binary to a private
+path and invokes it by absolute path. It records that binary's version and
+SHA-256 in the task's runtime evidence, then removes it before the target agent
+runs. It does not replace an evaluator task image's own `uv`, add the runtime
+binary to the task `PATH`, or expose it to commands executed by the target
+agent.
 
 ```dotenv
 EVOLVE_HOME=/data/evolve/home
