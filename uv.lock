@@ -450,10 +450,13 @@ name = "rsihub"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "fastapi" },
     { name = "harbor" },
+    { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
     { name = "typer" },
+    { name = "uvicorn" },
 ]
 
 [package.dev-dependencies]
@@ -469,10 +472,13 @@ docs = [
 
 [package.metadata]
 requires-dist = [
+    { name = "fastapi", specifier = ">=0.128.0" },
     { name = "harbor", specifier = "==0.18.0" },
+    { name = "pydantic", specifier = ">=2" },
     { name = "python-dotenv", specifier = ">=1.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "typer", specifier = ">=0.12" },
+    { name = "uvicorn", specifier = ">=0.38.0" },
 ]
 
 [package.metadata.requires-dev]

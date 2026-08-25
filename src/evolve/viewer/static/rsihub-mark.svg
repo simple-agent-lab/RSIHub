@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 40 40" role="img" aria-labelledby="mark-title mark-description">
+  <title id="mark-title">RSIHub ring mark</title>
+  <desc id="mark-description">Four separated arc segments, one in each blue-to-green ramp color, surround an open center.</desc>
+  <path d="M23.95 7.09 A13.5 13.5 0 0 1 32.91 16.05" fill="none" stroke="#3c8cff" stroke-width="6" stroke-linecap="round"/>
+  <path d="M32.91 23.95 A13.5 13.5 0 0 1 23.95 32.91" fill="none" stroke="#0095fd" stroke-width="6" stroke-linecap="round"/>
+  <path d="M16.05 32.91 A13.5 13.5 0 0 1 7.09 23.95" fill="none" stroke="#00cbd4" stroke-width="6" stroke-linecap="round"/>
+  <path d="M7.09 16.05 A13.5 13.5 0 0 1 16.05 7.09" fill="none" stroke="#78e85c" stroke-width="6" stroke-linecap="round"/>
+</svg>
