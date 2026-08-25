@@ -389,7 +389,7 @@ def test_miniswe_wrapper_loads_evolved_skills_and_memory_into_system_prompt(
     assert "Run the task-specific verifier when available" in context
     assert agent_kwargs["system_template"].startswith("Base MiniSwe system prompt.")
     assert context in agent_kwargs["system_template"]
-    assert '_apply_evolved_context(agent_kwargs, "/installed-agent/miniswe-source")' in module.RUNNER
+    assert '_apply_evolved_context(agent_kwargs, "/tmp/evolve-miniswe-source")' in module.RUNNER
 
 
 def test_miniswe_wrapper_rejects_invalid_evolved_memory(
@@ -500,7 +500,7 @@ def test_miniswe_wrapper_subclasses_harbor_miniswe_and_installs_candidate_source
         async def upload_file(self, source_path, target_path):
             source = Path(source_path)
             self.uploads.append((source, target_path))
-            if target_path == "/tmp/evolve-miniswe-source.tar":
+            if target_path == "/tmp/evolve-miniswe-source/.evolve-source.tar":
                 self.uploaded_archive_destination = target_path
                 with tarfile.open(source) as archive:
                     self.archive_modes = {member.name: member.mode for member in archive.getmembers()}
@@ -508,6 +508,7 @@ def test_miniswe_wrapper_subclasses_harbor_miniswe_and_installs_candidate_source
     environment = Environment()
     host_uv = tmp_path / "uv"
     host_uv.write_text("uv")
+    host_uv.chmod(0o700)
     monkeypatch.setenv("EVOLVE_UV_BINARY", str(host_uv))
     monkeypatch.setenv("EVOLVE_CANDIDATE_SOURCE", str(target))
     monkeypatch.setenv("http_proxy", "http://dependency-proxy.example:8118")
@@ -521,8 +522,8 @@ def test_miniswe_wrapper_subclasses_harbor_miniswe_and_installs_candidate_source
 
     assert issubclass(module.MiniSweSourceAgent, base)
     assert not environment.uploaded_directories
-    assert environment.uploaded_archive_destination == "/tmp/evolve-miniswe-source.tar"
-    assert environment.uploads[1] == (host_uv, "/tmp/evolve-runtime-uv")
+    assert environment.uploaded_archive_destination == "/tmp/evolve-miniswe-source/.evolve-source.tar"
+    assert environment.uploads[1] == (host_uv, "/tmp/evolve-miniswe-source/.evolve-runtime-uv")
     assert environment.archive_modes["./pyproject.toml"] == 0o600
     assert environment.archive_modes["./src"] == 0o700
     assert not (environment.archive_modes["./pyproject.toml"] & stat.S_IWOTH)
@@ -531,25 +532,32 @@ def test_miniswe_wrapper_subclasses_harbor_miniswe_and_installs_candidate_source
     assert stat.S_IMODE((target / "uv.lock").stat().st_mode) == 0o600
     joined = "\n".join(environment.commands)
     assert "chmod -R a+rX" not in joined
-    extraction = environment.commands[0]
-    assert "tar -xf /tmp/evolve-miniswe-source.tar" in extraction
+    source_setup = environment.commands[0]
+    assert "rm -rf /tmp/evolve-miniswe-source" in source_setup
+    assert "mkdir -m 0700 /tmp/evolve-miniswe-source" in source_setup
+    assert "chown" not in source_setup
+    extraction = environment.commands[1]
+    assert "tar -xf /tmp/evolve-miniswe-source/.evolve-source.tar" in extraction
     assert "--no-same-owner" in extraction
-    assert "mkdir -p /installed-agent/miniswe-source" in extraction
-    assert "rm -f /tmp/evolve-miniswe-source.tar" not in extraction
-    bootstrap = environment.commands[1]
+    assert "mkdir -m 0700 /tmp/evolve-miniswe-source" not in extraction
+    assert "rm -f /tmp/evolve-miniswe-source/.evolve-source.tar" in extraction
+    bootstrap = environment.commands[2]
     assert "apt-get" not in joined
     assert "apk add" not in joined
-    assert "if [ ! -f /tmp/evolve-runtime-uv ]" in bootstrap
-    assert "chmod 700 /tmp/evolve-runtime-uv" in bootstrap
-    assert "/tmp/evolve-runtime-uv --version > /tmp/evolve-runtime-uv.version" in bootstrap
+    assert "if [ ! -x /tmp/evolve-miniswe-source/.evolve-runtime-uv ]" in bootstrap
+    assert "chmod 700" not in bootstrap
+    assert (
+        "/tmp/evolve-miniswe-source/.evolve-runtime-uv --version > "
+        "/tmp/evolve-miniswe-source/.evolve-runtime-uv.version"
+    ) in bootstrap
     assert "command -v uv" not in bootstrap
     assert '"$HOME/.local/bin/uv"' not in joined
     assert "uv tool install" not in joined
     assert "mini-swe-agent --" not in joined
     assert "curl" not in bootstrap
-    assert "/tmp/evolve-runtime-uv sync --project /installed-agent/miniswe-source --frozen" in joined
-    assert "/installed-agent/miniswe-source/.venv/bin/python" in joined
-    assert "uv run --project /installed-agent/miniswe-source" not in joined
+    assert "/tmp/evolve-miniswe-source/.evolve-runtime-uv sync --project /tmp/evolve-miniswe-source --frozen" in joined
+    assert "/tmp/evolve-miniswe-source/.venv/bin/python" in joined
+    assert "uv run --project /tmp/evolve-miniswe-source" not in joined
     assert "from minisweagent.agents.default import DefaultAgent" in joined
     sync_indices = [index for index, command in enumerate(environment.commands) if "uv sync" in command]
     assert len(sync_indices) == 2
@@ -581,18 +589,60 @@ def test_miniswe_wrapper_subclasses_harbor_miniswe_and_installs_candidate_source
     assert '"frozen_sync": true' in environment.commands[evidence_index]
     assert '"miniswe_import": true' in environment.commands[evidence_index]
     assert '"model_path_init": true' in environment.commands[evidence_index]
-    assert "/tmp/evolve-runtime-uv.version" in environment.commands[evidence_index]
+    assert "/tmp/evolve-miniswe-source/.evolve-runtime-uv.version" in environment.commands[evidence_index]
     assert "hashlib.sha256" in environment.commands[evidence_index]
-    assert "/tmp/evolve-runtime-uv" in environment.commands[evidence_index]
+    assert "/tmp/evolve-miniswe-source/.evolve-runtime-uv" in environment.commands[evidence_index]
     assert "skills_loaded" in environment.commands[evidence_index]
     assert "memories_loaded" in environment.commands[evidence_index]
     assert "context_chars" in environment.commands[evidence_index]
-    assert environment.commands[evidence_index + 1] == ("rm -f /tmp/evolve-runtime-uv /tmp/evolve-runtime-uv.version")
+    assert environment.commands[evidence_index + 1] == (
+        "rm -f /tmp/evolve-miniswe-source/.evolve-runtime-uv /tmp/evolve-miniswe-source/.evolve-runtime-uv.version"
+    )
     assert environment.envs[evidence_index + 1] == {}
     assert expected_proxy_env.items() <= environment.envs[model_index].items()
     assert environment.envs[model_index]["OPENAI_API_KEY"] == "test-key"
     assert environment.envs[model_index]["OPENAI_BASE_URL"] == "https://llm.example/v1"
     assert "unset HTTP_PROXY" not in joined
+
+
+def test_miniswe_source_directory_setup_uses_agent_writable_temp(monkeypatch) -> None:
+    _install_fake_harbor(monkeypatch)
+    module = _load(ADAPTER)
+
+    class Environment:
+        def __init__(self) -> None:
+            self.commands = []
+            self.envs = []
+
+    environment = Environment()
+    asyncio.run(module.MiniSweSourceAgent()._prepare_source_directory(environment))
+
+    assert environment.commands == [
+        "set -euo pipefail; rm -rf /tmp/evolve-miniswe-source; mkdir -m 0700 /tmp/evolve-miniswe-source"
+    ]
+    assert environment.envs == [{}]
+
+
+def test_miniswe_source_directory_setup_failure_is_infrastructure_owned(monkeypatch) -> None:
+    _install_fake_harbor(monkeypatch)
+    module = _load(ADAPTER)
+
+    class Environment:
+        def __init__(self) -> None:
+            self.commands = []
+            self.envs = []
+
+    async def fail_as_agent(environment, command, env=None):
+        raise RuntimeError("read-only task filesystem")
+
+    agent = module.MiniSweSourceAgent()
+    agent.exec_as_agent = fail_as_agent
+
+    with pytest.raises(
+        module.EvolveRuntimeInfrastructureError,
+        match=("EVOLVE_RUNTIME_INFRASTRUCTURE: source_directory_setup_failed: read-only task filesystem"),
+    ):
+        asyncio.run(agent._prepare_source_directory(Environment()))
 
 
 def test_miniswe_wrapper_runs_candidate_source_api_not_cli(tmp_path: Path, monkeypatch) -> None:
@@ -615,8 +665,8 @@ def test_miniswe_wrapper_runs_candidate_source_api_not_cli(tmp_path: Path, monke
 
     joined = "\n".join(environment.commands)
     assert "mini-swe-agent --" not in joined
-    assert "/installed-agent/miniswe-source/.venv/bin/python /tmp/miniswe-source-run.py" in joined
-    assert "uv run --project /installed-agent/miniswe-source" not in joined
+    assert "/tmp/evolve-miniswe-source/.venv/bin/python /tmp/miniswe-source-run.py" in joined
+    assert "uv run --project /tmp/evolve-miniswe-source" not in joined
     assert "get_config_from_spec" in joined
     assert "DefaultAgent" in joined
     assert "from minisweagent.environments.local import LocalEnvironment" in joined
