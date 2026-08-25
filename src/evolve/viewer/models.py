@@ -105,6 +105,7 @@ class GenerationDetail(BaseModel):
 class ExperimentSummary(BaseModel):
     id: str
     workspace: str
+    benchmark: str | None = None
     recipe: str | None = None
     health: HealthState
     focus_generation: str | None = None

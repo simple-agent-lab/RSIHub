@@ -4,6 +4,7 @@ const state = { entries: [], rows: [], agent: 'All', method: 'All', query: '', r
 const groups = document.querySelector('#experiment-groups');
 const summary = document.querySelector('#catalog-summary');
 const refreshState = document.querySelector('#refresh-state');
+const benchmarkName = document.querySelector('#benchmark-name');
 const methodOrder = ['A-Evolve', 'GEPA', 'AHE', 'HyperAgents'];
 
 const escapeHtml = (value) => String(value ?? '')
@@ -24,6 +25,17 @@ function derive(entry, snapshot, error = null) {
   const seed = generations.find((item) => String(item.genid) === '0') || generations[0] || null;
   const final = champion(generations);
   return { entry, snapshot, error, generations, seed, champion: final };
+}
+
+function renderBenchmarkHeading(entries) {
+  const benchmarks = [...new Set(entries.map((entry) => entry.benchmark).filter(Boolean))];
+  const fullLabel = benchmarks.join(' · ');
+  benchmarkName.textContent = benchmarks.length === 0
+    ? 'Experiment catalog'
+    : benchmarks.length === 1
+      ? benchmarks[0]
+      : `${benchmarks.length} benchmarks · ${fullLabel}`;
+  benchmarkName.title = fullLabel;
 }
 
 function renderSummary(rows) {
@@ -56,13 +68,14 @@ function renderFilters() {
 }
 
 function experimentCard(row) {
-  if (row.error) return `<article class="experiment-card"><div class="card-heading"><div><p class="card-kicker">${escapeHtml(row.entry.agent || 'Agent')}</p><h4>${escapeHtml(row.entry.method || row.entry.label)}</h4></div><span class="status-mark failed">Unavailable</span></div><p class="error-note">${escapeHtml(row.error)}</p><div class="card-footer"><span>${escapeHtml(row.entry.workspace)}</span></div></article>`;
+  const identity = [row.entry.benchmark, row.entry.agent ? `${row.entry.agent} target` : null, row.entry.selection_metric].filter(Boolean).join(' · ');
+  if (row.error) return `<article class="experiment-card"><div class="card-heading"><div><p class="card-kicker">${escapeHtml(identity || 'Experiment')}</p><h4>${escapeHtml(row.entry.method || row.entry.label)}</h4></div><span class="status-mark failed">Unavailable</span></div><p class="error-note">${escapeHtml(row.error)}</p><div class="card-footer"><span>${escapeHtml(row.entry.workspace)}</span></div></article>`;
   const health = row.snapshot.experiment.health;
   const delta = row.seed?.score != null && row.champion?.score != null ? row.champion.score - row.seed.score : null;
   const rejected = row.generations.filter((item) => item.score == null || item.status.includes('rejected') || item.status.includes('failed')).length;
   return `<a class="experiment-card" href="${escapeHtml(row.entry.url)}">
     <div class="card-heading">
-      <div><p class="card-kicker">${escapeHtml(row.entry.agent || 'Target agent')} · ${escapeHtml(row.entry.selection_metric || 'Selection score')}</p><h4>${escapeHtml(row.entry.method || row.entry.label)}</h4></div>
+      <div><p class="card-kicker">${escapeHtml(identity || 'Experiment')}</p><h4>${escapeHtml(row.entry.method || row.entry.label)}</h4></div>
       <span class="status-mark ${escapeHtml(health)}">${escapeHtml(health.replaceAll('_', ' '))}</span>
     </div>
     <div class="score-row">
@@ -107,6 +120,7 @@ async function refresh() {
       const response = await fetch('/api/evolve/catalog', {cache: 'no-store'});
       if (!response.ok) throw new Error(`catalog returned ${response.status}`);
       state.entries = (await response.json()).experiments;
+      renderBenchmarkHeading(state.entries);
     }
     const snapshotsResponse = await fetch('/api/evolve/catalog/snapshots', {cache: 'no-store'});
     if (!snapshotsResponse.ok) throw new Error(`catalog snapshots returned ${snapshotsResponse.status}`);

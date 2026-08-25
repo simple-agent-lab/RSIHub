@@ -82,6 +82,15 @@ def test_newest_candidate_controls_overview_health(tmp_path: Path) -> None:
     assert bundle.snapshot.experiment.best_score == 0.6
 
 
+def test_experiment_summary_exposes_benchmark_from_dataset(tmp_path: Path) -> None:
+    sources = _sources(tmp_path, rows=[])
+    sources.config["evaluator"]["dataset"] = "/datasets/terminal-bench-2-50-19-20"
+
+    experiment = build_snapshot(sources).snapshot.experiment
+
+    assert experiment.benchmark == "Terminal Bench 2"
+
+
 def test_genesis_only_reports_its_canonical_evaluation_stage(tmp_path: Path) -> None:
     sources = _sources(
         tmp_path,

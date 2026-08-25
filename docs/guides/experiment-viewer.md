@@ -30,12 +30,12 @@ The command prints the selected URL and a matching SSH tunnel command.
 
 ## Compare multiple experiments
 
-Create a YAML catalog when several completed or active workspaces should share
-one index:
+Create a YAML catalog manually when several completed or active workspaces
+should share one index. A catalog is not needed when viewing one workspace:
 
 ```yaml
 experiments:
-  - slug: miniswe-a-evolve
+  - slug: miniswe-aevolve
     label: A-Evolve · MiniSWE
     method: A-Evolve
     agent: MiniSWE
@@ -48,6 +48,18 @@ experiments:
     selection_metric: Gate
     workspace: /absolute/path/to/another-experiment
 ```
+
+Only `workspace` is required. The remaining fields control presentation:
+
+| Field | Required | Behavior |
+| --- | --- | --- |
+| `workspace` | yes | Absolute path, or a path relative to the catalog file, to a workspace containing `evolve.yaml` and `archive.jsonl`. |
+| `slug` | no | Stable URL segment; generated from `label` or the workspace directory name when omitted. |
+| `label` | no | Human-readable experiment label; defaults to the workspace directory name. |
+| `method` | no | Evolution-method label used by cards and method filters. It is not currently inferred from `evolve.yaml`. |
+| `agent` | no | Target-agent label used for grouping and agent filters. It is not currently inferred from `evolve.yaml`; arbitrary new agent names are supported. |
+| `selection_metric` | no | Score label shown on the experiment card. |
+| `benchmark` | no | Explicit display name. When omitted, the viewer derives it from `evaluator.benchmark`, `evaluator.dataset_name`, or `evaluator.dataset` in `evolve.yaml`. |
 
 Start the catalog with:
 
@@ -62,12 +74,17 @@ server, including champion replay, artifacts, trials, and Harbor evidence.
 Catalog paths may be absolute or relative to the catalog file. Every workspace
 must contain `evolve.yaml` and `archive.jsonl`.
 
-## View a DevBox experiment
+The catalog heading summarizes the benchmarks represented by all entries. Each
+experiment card and every page inside an experiment also show that experiment's
+benchmark. A catalog spanning several benchmarks lists all distinct benchmark
+names rather than displaying a fixed benchmark label.
 
-Start the server on DevBox and leave it running:
+## View a remote experiment
+
+Start the server on the remote machine and leave it running:
 
 ```bash
-# DevBox
+# Remote machine
 evolve view /data00/home/$USER/experiments/my-run --port 8080
 ```
 
@@ -75,7 +92,7 @@ Forward the same port from the laptop:
 
 ```bash
 # Laptop
-ssh -N -L 8080:127.0.0.1:8080 DevBox
+ssh -N -L 8080:127.0.0.1:8080 user@remote-host
 ```
 
 Open `http://127.0.0.1:8080/`. Keep both terminal processes alive while using
@@ -137,7 +154,7 @@ Keep the default loopback binding unless access is protected separately.
 
 ## Troubleshooting
 
-**The laptop cannot connect.** Confirm the DevBox server is still running, the
+**The laptop cannot connect.** Confirm the remote viewer server is still running, the
 tunnel uses the port printed by `evolve view`, and the browser opens the local
 side of the tunnel (`127.0.0.1`).
 

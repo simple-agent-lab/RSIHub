@@ -304,7 +304,7 @@ def create_catalog_app(entries: Iterable[ViewerWorkspace]) -> FastAPI:
 def run_viewer(workspace: Path, host: str, port_spec: str) -> None:
     port = _select_bindable_port(host, _ports(port_spec))
     print(f"RSIHub viewer: http://127.0.0.1:{port}")
-    print(f"DevBox tunnel: ssh -N -L {port}:127.0.0.1:{port} DevBox")
+    print(f"SSH tunnel: ssh -N -L {port}:127.0.0.1:{port} user@remote-host")
     uvicorn.run(create_viewer_app(workspace), host=host, port=port)
 
 
@@ -312,7 +312,7 @@ def run_catalog_viewer(catalog_path: Path, host: str, port_spec: str) -> None:
     entries = load_catalog(catalog_path)
     port = _select_bindable_port(host, _ports(port_spec))
     print(f"RSIHub experiment catalog: http://127.0.0.1:{port}")
-    print(f"DevBox tunnel: ssh -N -L {port}:127.0.0.1:{port} DevBox")
+    print(f"SSH tunnel: ssh -N -L {port}:127.0.0.1:{port} user@remote-host")
     uvicorn.run(create_catalog_app(entries), host=host, port=port)
 
 

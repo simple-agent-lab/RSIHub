@@ -269,6 +269,15 @@ def test_experiment_overview_reuses_the_catalog_lineage_tree() -> None:
     assert "lineageChart(row.generations, row.champion)" in catalog_javascript
     assert "import {lineageChart} from './viewer-ui.js'" in catalog_javascript
     assert 'type="module" src="/catalog-assets/catalog.js"' in catalog_html
+    assert 'id="benchmark-name"' in catalog_html
+    assert "Tau3 Banking" not in catalog_html
+    assert "renderBenchmarkHeading(state.entries)" in catalog_javascript
+    assert "benchmarks.length === 1" in catalog_javascript
+    assert "row.entry.benchmark" in catalog_javascript
+
+    experiment_html = (static / "index.html").read_text()
+    assert 'id="experiment-benchmark"' in experiment_html
+    assert "experiment.benchmark || 'Experiment'" in javascript
 
 
 @pytest.mark.parametrize(

@@ -65,4 +65,7 @@ def test_run_viewer_prints_rsihub_identity(monkeypatch, tmp_path: Path, capsys) 
 
     run_viewer(tmp_path, "127.0.0.1", "8765")
 
-    assert capsys.readouterr().out.startswith("RSIHub viewer: http://127.0.0.1:8765\n")
+    output = capsys.readouterr().out
+    assert output.startswith("RSIHub viewer: http://127.0.0.1:8765\n")
+    assert "SSH tunnel: ssh -N -L 8765:127.0.0.1:8765 user@remote-host" in output
+    assert "DevBox" not in output

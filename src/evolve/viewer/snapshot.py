@@ -11,6 +11,7 @@ from typing import Any, cast
 
 from ..archive import RECEIPT_CERTIFIED_FIELD
 from ..population import generation_number
+from .benchmark import benchmark_label
 from .models import (
     ArtifactReference,
     ArtifactTarget,
@@ -468,6 +469,7 @@ def _experiment_summary(
     return ExperimentSummary(
         id=str(experiment.get("id") or sources.workspace.name),
         workspace=str(sources.workspace),
+        benchmark=benchmark_label(sources.config),
         recipe=str(experiment["recipe"]) if experiment.get("recipe") is not None else None,
         health=health,
         focus_generation=focus_id,

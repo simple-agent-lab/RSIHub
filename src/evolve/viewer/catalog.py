@@ -7,6 +7,8 @@ from typing import Any
 
 import yaml
 
+from .benchmark import benchmark_label
+
 _SAFE_SLUG = re.compile(r"[^a-z0-9]+")
 
 
@@ -18,6 +20,7 @@ class ViewerWorkspace:
     method: str | None = None
     agent: str | None = None
     selection_metric: str | None = None
+    benchmark: str | None = None
 
     def public_record(self) -> dict[str, str | None]:
         return {
@@ -26,6 +29,7 @@ class ViewerWorkspace:
             "method": self.method,
             "agent": self.agent,
             "selection_metric": self.selection_metric,
+            "benchmark": self.benchmark,
             "workspace": str(self.workspace),
             "url": f"/experiments/{self.slug}/",
             "snapshot_url": f"/experiments/{self.slug}/api/evolve/snapshot",
@@ -63,6 +67,7 @@ def load_catalog(path: Path) -> tuple[ViewerWorkspace, ...]:
                 method=_optional_text(raw.get("method")),
                 agent=_optional_text(raw.get("agent")),
                 selection_metric=_optional_text(raw.get("selection_metric")),
+                benchmark=_benchmark_label(raw, workspace),
             )
         )
     if not entries:
@@ -90,3 +95,14 @@ def _slug(value: Any) -> str:
 
 def _optional_text(value: Any) -> str | None:
     return str(value) if value not in (None, "") else None
+
+
+def _benchmark_label(raw: dict[str, Any], workspace: Path) -> str | None:
+    explicit = _optional_text(raw.get("benchmark"))
+    try:
+        config = yaml.safe_load((workspace / "evolve.yaml").read_text())
+    except (OSError, yaml.YAMLError):
+        return explicit
+    if not isinstance(config, dict):
+        return explicit
+    return benchmark_label(config, explicit=explicit)

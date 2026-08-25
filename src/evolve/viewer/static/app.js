@@ -148,6 +148,7 @@ function restoreViewState(saved) {
 
 function updateChrome() {
   const experiment = state.snapshot.experiment;
+  document.querySelector('#experiment-benchmark').textContent = experiment.benchmark || 'Experiment';
   experimentName.textContent = experiment.id;
   experimentName.title = experiment.workspace;
   healthPill.className = `status-pill ${experiment.health}`;
