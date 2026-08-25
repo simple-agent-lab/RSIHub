@@ -128,6 +128,22 @@ main.diff-mode { width: min(var(--diff-content-max), 100%); }
 .champion-diff-empty { padding: 14px; color: var(--muted); background: var(--canvas); border-radius: 7px; font-size: 10px; text-align: center; }
 .champion-diff-actions { display: flex; align-items: center; gap: 10px; padding-top: 15px; border-top: 1px solid var(--line); }
 .champion-diff-actions span { color: var(--muted); font-size: 9px; }
+.evolution-lineage-card { padding-bottom: 15px; }
+.evolution-lineage-card .card-header { margin-bottom: 13px; }
+.lineage-box { position: relative; min-height: 146px; padding: 12px 14px 4px; overflow: hidden; background: var(--canvas); border: 1px solid var(--line); border-radius: 10px; }
+.lineage-box svg { display: block; width: 100%; height: 128px; overflow: visible; }
+.lineage-edge { fill: none; stroke: #aebdb6; stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+.lineage-edge.champion-path { stroke: #4c9a73; stroke-width: 1.8; }
+.lineage-node { fill: #367ac3; stroke: white; stroke-width: 1.6; vector-effect: non-scaling-stroke; }
+.lineage-node.champion { fill: var(--accent); stroke: #b8d9c8; stroke-width: 3; }
+.lineage-node.rejected { fill: var(--danger); }
+.lineage-axis-line { stroke: #dce3df; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.lineage-axis-label { fill: var(--subtle); font: 8px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.lineage-legend { display: flex; flex-wrap: wrap; gap: 18px; padding: 11px 2px 0; color: var(--muted); font-size: 10px; }
+.lineage-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.lineage-legend-dot { width: 7px; height: 7px; display: inline-block; background: #367ac3; border-radius: 50%; }
+.lineage-legend-dot.champion { background: var(--accent); box-shadow: 0 0 0 2px #b8d9c8; }
+.lineage-legend-dot.rejected { background: var(--danger); }
 .champion-next-button { min-width: 142px; }
 .champion-no-change { min-height: 240px; display: grid; place-content: center; gap: 6px; padding: 28px; color: var(--muted); background: #f7f9f8; text-align: center; }
 .champion-no-change strong { color: var(--ink); font: 650 11px ui-monospace, SFMono-Regular, Menlo, monospace; }

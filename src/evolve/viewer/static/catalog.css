@@ -111,13 +111,13 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 .score-delta.negative { color: var(--danger); background: var(--danger-soft); }
 .lineage-box { position: relative; min-height: 116px; padding: 9px 8px 2px; overflow: hidden; background: var(--canvas); border: 1px solid var(--line); border-radius: 10px; }
 .lineage-box svg { width: 100%; height: 100px; display: block; overflow: visible; }
-.edge { fill: none; stroke: #aebdb6; stroke-width: 1.2; }
-.edge.champion-path { stroke: #4c9a73; stroke-width: 1.8; }
-.node { fill: var(--blue); stroke: white; stroke-width: 1.6; }
-.node.champion { fill: var(--accent); stroke: #b8d9c8; stroke-width: 3; }
-.node.rejected { fill: var(--danger); }
-.axis-line { stroke: #dce3df; stroke-width: 1; }
-.axis-label { fill: var(--subtle); font: 8px var(--mono); }
+.lineage-edge { fill: none; stroke: #aebdb6; stroke-width: 1.2; }
+.lineage-edge.champion-path { stroke: #4c9a73; stroke-width: 1.8; }
+.lineage-node { fill: var(--blue); stroke: white; stroke-width: 1.6; }
+.lineage-node.champion { fill: var(--accent); stroke: #b8d9c8; stroke-width: 3; }
+.lineage-node.rejected { fill: var(--danger); }
+.lineage-axis-line { stroke: #dce3df; stroke-width: 1; }
+.lineage-axis-label { fill: var(--subtle); font: 8px var(--mono); }
 .card-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 10px; }
 .open-label { color: #24664c; font-weight: 700; }
 .loading-panel, .empty-panel { min-height: 220px; display: flex; align-items: center; justify-content: center; gap: 18px; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }

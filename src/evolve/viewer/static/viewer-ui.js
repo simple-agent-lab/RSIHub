@@ -43,6 +43,36 @@ export function generationLineage(generations, selectedId) {
   return lineage.reverse();
 }
 
+export function lineageChart(generations, selected) {
+  const ordered = [...generations].sort((left, right) => compareGenerationIds(left.genid, right.genid));
+  if (!ordered.length) return '<div class="empty">No generations recorded.</div>';
+  const width = 560;
+  const height = 92;
+  const maxGeneration = Math.max(10, ...ordered.map((item) => Math.max(0, generationKey(item.genid)[0])));
+  const x = (item) => 24 + (Math.max(0, generationKey(item.genid)[0]) / maxGeneration) * (width - 48);
+  const y = (item) => item.score == null ? 76 : 68 - Math.max(0, Math.min(1, Number(item.score))) * 55;
+  const byId = new Map(ordered.map((item) => [String(item.genid), item]));
+  const selectedId = selected == null ? null : String(selected.genid ?? selected);
+  const selectedPath = new Set(generationLineage(ordered, selectedId).map((item) => String(item.genid)));
+  const edges = ordered.filter((item) => item.parent != null && byId.has(String(item.parent))).map((item) => {
+    const parent = byId.get(String(item.parent));
+    const mid = (x(parent) + x(item)) / 2;
+    const active = selectedPath.has(String(item.genid)) && selectedPath.has(String(parent.genid));
+    return `<path class="lineage-edge ${active ? 'champion-path' : ''}" d="M ${x(parent)} ${y(parent)} C ${mid} ${y(parent)}, ${mid} ${y(item)}, ${x(item)} ${y(item)}"></path>`;
+  }).join('');
+  const nodes = ordered.map((item) => {
+    const terminal = ['rejected_validation', 'operator_failed', 'candidate_invalid', 'infra_failed', 'infrastructure_failed'].includes(item.status);
+    const active = selectedId != null && String(item.genid) === selectedId;
+    const score = item.score == null ? 'no score' : `${(Number(item.score) * 100).toFixed(0)}%`;
+    return `<circle class="lineage-node ${terminal ? 'rejected' : ''} ${active ? 'champion' : ''}" cx="${x(item)}" cy="${y(item)}" r="${active ? 5 : 3.8}"><title>Generation ${escapeSvg(item.genid)} · ${score} · ${escapeSvg(item.status)}</title></circle>`;
+  }).join('');
+  const labels = [0, maxGeneration / 2, maxGeneration].map((value) => {
+    const generation = Number.isInteger(value) ? value : Number(value.toFixed(1));
+    return `<text class="lineage-axis-label" x="${24 + value / maxGeneration * (width - 48)}" y="90" text-anchor="middle">G${generation}</text>`;
+  }).join('');
+  return `<svg class="lineage-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Generation lineage with selection scores"><line class="lineage-axis-line" x1="24" y1="78" x2="${width - 24}" y2="78"></line>${edges}${nodes}${labels}</svg>`;
+}
+
 export function artifactHref(id) {
   return `/artifacts/${encodeURIComponent(id)}`;
 }

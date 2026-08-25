@@ -1,3 +1,5 @@
+import {lineageChart} from './viewer-ui.js';
+
 const state = { entries: [], rows: [], agent: 'All', method: 'All', query: '', refreshing: false };
 const groups = document.querySelector('#experiment-groups');
 const summary = document.querySelector('#catalog-summary');
@@ -15,40 +17,6 @@ function champion(generations) {
     if (candidate.score == null || candidate.selection_eligible === false) return best;
     return best == null || Number(candidate.score) > Number(best.score) ? candidate : best;
   }, null);
-}
-
-function generationNumber(value) {
-  const match = String(value).match(/^\d+/);
-  return match ? Number(match[0]) : 0;
-}
-
-function lineageSvg(generations, selected) {
-  const ordered = [...generations].sort((a, b) => generationNumber(a.genid) - generationNumber(b.genid));
-  if (!ordered.length) return '<div class="error-note">No generations recorded.</div>';
-  const width = 560;
-  const height = 92;
-  const x = (item) => 24 + (generationNumber(item.genid) / Math.max(10, ...ordered.map((row) => generationNumber(row.genid)))) * (width - 48);
-  const y = (item) => item.score == null ? 76 : 68 - Math.max(0, Math.min(1, Number(item.score))) * 55;
-  const byId = new Map(ordered.map((item) => [String(item.genid), item]));
-  const championPath = new Set();
-  let cursor = selected;
-  while (cursor && !championPath.has(String(cursor.genid))) {
-    championPath.add(String(cursor.genid));
-    cursor = cursor.parent == null ? null : byId.get(String(cursor.parent));
-  }
-  const edges = ordered.filter((item) => item.parent != null && byId.has(String(item.parent))).map((item) => {
-    const parent = byId.get(String(item.parent));
-    const mid = (x(parent) + x(item)) / 2;
-    const active = championPath.has(String(item.genid)) && championPath.has(String(parent.genid));
-    return `<path class="edge ${active ? 'champion-path' : ''}" d="M ${x(parent)} ${y(parent)} C ${mid} ${y(parent)}, ${mid} ${y(item)}, ${x(item)} ${y(item)}"></path>`;
-  }).join('');
-  const nodes = ordered.map((item) => {
-    const terminal = ['rejected_validation', 'operator_failed', 'candidate_invalid', 'infra_failed', 'infrastructure_failed'].includes(item.status);
-    const active = selected && String(item.genid) === String(selected.genid);
-    return `<circle class="node ${terminal ? 'rejected' : ''} ${active ? 'champion' : ''}" cx="${x(item)}" cy="${y(item)}" r="${active ? 5 : 3.8}"><title>Generation ${escapeHtml(item.genid)} · ${item.score == null ? 'no score' : formatScore(item.score)} · ${escapeHtml(item.status)}</title></circle>`;
-  }).join('');
-  const labels = [0, 5, 10].map((value) => `<text class="axis-label" x="${24 + value / 10 * (width - 48)}" y="90" text-anchor="middle">G${value}</text>`).join('');
-  return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Generation lineage with selection scores"><line class="axis-line" x1="24" y1="78" x2="${width - 24}" y2="78"></line>${edges}${nodes}${labels}</svg>`;
 }
 
 function derive(entry, snapshot, error = null) {
@@ -103,7 +71,7 @@ function experimentCard(row) {
       <div class="score-cell"><span>Champion · G${escapeHtml(row.champion?.genid ?? '—')}</span><strong>${formatScore(row.champion?.score)}</strong></div>
       <span class="score-delta ${delta < 0 ? 'negative' : ''}">${delta == null ? 'No delta' : signedScore(delta)}</span>
     </div>
-    <div class="lineage-box">${lineageSvg(row.generations, row.champion)}</div>
+    <div class="lineage-box">${lineageChart(row.generations, row.champion)}</div>
     <div class="card-footer"><span>${row.generations.length} generations · ${rejected} rejected/failed</span><span class="open-label">Open evolution record →</span></div>
   </a>`;
 }

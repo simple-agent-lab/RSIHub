@@ -4,6 +4,7 @@ import {
   finalResultGeneration,
   generationLineage,
   generationsThrough,
+  lineageChart,
   scoreTrend,
   splitDiffFiles,
   snapshotRevision,
@@ -206,6 +207,7 @@ async function renderOverview() {
     </div>
     <div class="stack">
       ${healthCard(experiment, finalDetail, true)}
+      ${lineageCard(snapshot.generations, finalResult)}
       <div class="grid-two">
         ${championDiffCard(championChanges)}
         ${performanceCard(finalDetail, snapshot.generations, true)}
@@ -213,6 +215,22 @@ async function renderOverview() {
       ${generationTable(recent, 'Recent generations')}
     </div>`;
   bindPerformancePagers();
+}
+
+function lineageCard(generations, champion) {
+  const rejected = generations.filter((item) => item.score == null || String(item.status).includes('rejected') || String(item.status).includes('failed')).length;
+  return `<section class="card evolution-lineage-card">
+    <div class="card-header">
+      <div><h3>Evolution tree</h3><p>Parent topology and selection score across every generation</p></div>
+      <a class="button" href="/generations" data-evolve-link>View all generations</a>
+    </div>
+    <div class="lineage-box">${lineageChart(generations, champion)}</div>
+    <div class="lineage-legend" aria-label="Evolution tree legend">
+      <span><i class="lineage-legend-dot accepted"></i>${generations.length - rejected} evaluated</span>
+      <span><i class="lineage-legend-dot champion"></i>Champion · G${escapeHtml(champion?.genid ?? '—')}</span>
+      <span><i class="lineage-legend-dot rejected"></i>${rejected} rejected or failed</span>
+    </div>
+  </section>`;
 }
 
 async function loadChampionChanges(champion, generations) {

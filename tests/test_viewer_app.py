@@ -257,6 +257,20 @@ def test_frontend_has_required_navigation_and_refresh_contract() -> None:
     )
 
 
+def test_experiment_overview_reuses_the_catalog_lineage_tree() -> None:
+    static = Path(__file__).parents[1] / "src/evolve/viewer/static"
+    javascript = (static / "app.js").read_text()
+    catalog_javascript = (static / "catalog.js").read_text()
+    catalog_html = (static / "catalog.html").read_text()
+
+    assert "Evolution tree" in javascript
+    assert "lineageCard(snapshot.generations, finalResult)" in javascript
+    assert "lineageChart(generations, champion)" in javascript
+    assert "lineageChart(row.generations, row.champion)" in catalog_javascript
+    assert "import {lineageChart} from './viewer-ui.js'" in catalog_javascript
+    assert 'type="module" src="/catalog-assets/catalog.js"' in catalog_html
+
+
 @pytest.mark.parametrize(
     ("path", "media_type"),
     [

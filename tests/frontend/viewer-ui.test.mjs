@@ -8,6 +8,7 @@ import {
   finalResultGeneration,
   generationLineage,
   generationsThrough,
+  lineageChart,
   scoreAxis,
   scoreTrend,
   splitDiffFiles,
@@ -51,6 +52,22 @@ test('champion lineage stops safely at missing parents and cycles', () => {
 
   assert.deepEqual(missing.map((item) => item.genid), ['4']);
   assert.deepEqual(cycle.map((item) => item.genid), ['1', '2']);
+});
+
+test('lineage chart preserves branches and highlights the champion ancestry', () => {
+  const html = lineageChart([
+    {genid: '0', parent: null, score: 0.2, status: 'evaluated'},
+    {genid: '1', parent: '0', score: 0.3, status: 'evaluated'},
+    {genid: '2', parent: '0', score: null, status: 'rejected_validation'},
+    {genid: '10', parent: '1', score: 0.4, status: 'evaluated'},
+  ], {genid: '10'});
+
+  assert.match(html, /aria-label="Generation lineage with selection scores"/);
+  assert.equal((html.match(/lineage-edge champion-path/g) || []).length, 2);
+  assert.equal((html.match(/lineage-node rejected/g) || []).length, 1);
+  assert.match(html, /lineage-node\s+\s+champion/);
+  assert.match(html, />G0<.*>G5<.*>G10</s);
+  assert.match(html, /Generation 10 · 40% · evaluated/);
 });
 
 test('score chart crops its score axis and keeps generation labels', () => {
