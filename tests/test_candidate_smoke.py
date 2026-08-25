@@ -135,6 +135,128 @@ def test_model_smoke_uses_detached_snapshot_without_workspace_mutation(tmp_path:
     assert stat.S_IMODE((result.attempt_dir / "result.json").stat().st_mode) == 0o600
 
 
+def test_harbor_smoke_fails_when_task_result_contains_exception(tmp_path: Path, monkeypatch) -> None:
+    checkout = smoke_checkout(tmp_path)
+    (checkout / "evolve.yaml").write_text(
+        "surface:\n  include: [target/**]\n  exclude: []\nevaluator:\n  engine: harbor\n"
+    )
+    git(checkout, "add", "evolve.yaml")
+    git(checkout, "commit", "--amend", "--no-edit", "-q")
+
+    def fake_run_owned(command, *, cwd, env, timeout_s=None):
+        del command, cwd, timeout_s
+        job = Path(env["EVOLVE_RUN_DIR"]) / "jobs" / "job-1"
+        trial = job / "task-001__trial"
+        trial.mkdir(parents=True)
+        (job / "result.json").write_text(
+            json.dumps(
+                {
+                    "n_total_trials": 1,
+                    "stats": {
+                        "n_errored_trials": 1,
+                        "n_cancelled_trials": 0,
+                        "n_pending_trials": 0,
+                        "n_running_trials": 0,
+                    },
+                }
+            )
+        )
+        (trial / "result.json").write_text(
+            json.dumps(
+                {
+                    "task_name": "dataset__task-001",
+                    "exception_info": {
+                        "exception_type": "EvolveRuntimeInfrastructureError",
+                        "exception_message": "source directory setup failed\nsecret traceback",
+                    },
+                }
+            )
+        )
+        return SimpleNamespace(returncode=0, stdout="", stderr="", wall_s=0.01, timed_out=False)
+
+    monkeypatch.setattr(candidate_smoke_module, "run_owned", fake_run_owned)
+
+    result = run_candidate_smoke(checkout, workspace=checkout, mode=SmokeMode.MODEL)
+
+    assert result.status == "failed"
+    assert result.returncode == 0
+    stderr = result.stderr_path.read_text()
+    assert "EVOLVE_HARBOR_SMOKE_FAILED" in stderr
+    assert "EvolveRuntimeInfrastructureError: source directory setup failed" in stderr
+    assert "secret traceback" not in stderr
+    payload = json.loads((result.attempt_dir / "result.json").read_text())
+    assert payload["harbor_task_audit"] == {
+        "active_trials": 0,
+        "cancelled_trials": 0,
+        "errored_trials": 1,
+        "expected_trials": 1,
+        "invalid_results": 0,
+        "job_results": 1,
+        "required": True,
+        "status": "failed",
+        "task_exception_count": 1,
+        "task_results": 1,
+    }
+
+
+def test_harbor_smoke_passes_only_with_complete_exception_free_task_result(tmp_path: Path, monkeypatch) -> None:
+    checkout = smoke_checkout(tmp_path)
+    (checkout / "evolve.yaml").write_text(
+        "surface:\n  include: [target/**]\n  exclude: []\nevaluator:\n  engine: harbor\n"
+    )
+    git(checkout, "add", "evolve.yaml")
+    git(checkout, "commit", "--amend", "--no-edit", "-q")
+
+    def fake_run_owned(command, *, cwd, env, timeout_s=None):
+        del command, cwd, timeout_s
+        job = Path(env["EVOLVE_RUN_DIR"]) / "jobs" / "job-1"
+        trial = job / "task-001__trial"
+        trial.mkdir(parents=True)
+        (job / "result.json").write_text(
+            json.dumps(
+                {
+                    "n_total_trials": 1,
+                    "stats": {
+                        "n_errored_trials": 0,
+                        "n_cancelled_trials": 0,
+                        "n_pending_trials": 0,
+                        "n_running_trials": 0,
+                    },
+                }
+            )
+        )
+        (trial / "result.json").write_text(json.dumps({"task_name": "dataset__task-001", "exception_info": None}))
+        return SimpleNamespace(returncode=0, stdout="", stderr="", wall_s=0.01, timed_out=False)
+
+    monkeypatch.setattr(candidate_smoke_module, "run_owned", fake_run_owned)
+
+    result = run_candidate_smoke(checkout, workspace=checkout, mode=SmokeMode.MODEL)
+
+    assert result.status == "passed"
+    payload = json.loads((result.attempt_dir / "result.json").read_text())
+    assert payload["harbor_task_audit"]["status"] == "passed"
+    assert payload["harbor_task_audit"]["task_results"] == 1
+
+
+def test_harbor_smoke_fails_when_successful_process_writes_no_task_results(tmp_path: Path, monkeypatch) -> None:
+    checkout = smoke_checkout(tmp_path)
+    (checkout / "evolve.yaml").write_text(
+        "surface:\n  include: [target/**]\n  exclude: []\nevaluator:\n  engine: harbor\n"
+    )
+    git(checkout, "add", "evolve.yaml")
+    git(checkout, "commit", "--amend", "--no-edit", "-q")
+    monkeypatch.setattr(
+        candidate_smoke_module,
+        "run_owned",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="", stderr="", wall_s=0.01, timed_out=False),
+    )
+
+    result = run_candidate_smoke(checkout, workspace=checkout, mode=SmokeMode.MODEL)
+
+    assert result.status == "failed"
+    assert "Harbor produced no task result artifacts" in result.stderr_path.read_text()
+
+
 def test_smoke_prepares_and_injects_candidate_runtime(tmp_path: Path, monkeypatch) -> None:
     checkout = smoke_checkout(tmp_path)
     (checkout / "evolve.yaml").write_text(

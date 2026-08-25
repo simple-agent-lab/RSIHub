@@ -28,6 +28,7 @@ from ..runtime.environment import (
 )
 from ..runtime.uv import prepare_candidate_runtime
 from ..surface import surface_patterns
+from .harbor_smoke import HarborTaskAudit, audit_harbor_results
 from .snapshot import build_candidate_snapshot, materialize_snapshot
 
 SmokeStatus = Literal["passed", "failed", "unsupported"]
@@ -136,15 +137,21 @@ def run_candidate_smoke(
             env["EVOLVE_CANDIDATE_RUNTIME_MOUNTS_JSON"] = runtime.mounts_json()
         env.setdefault("EVOLVE_FRAMEWORK_PYTHON", sys.executable)
         completed = run_owned([str(script)], cwd=materialized, env=env)
+    harbor_audit = audit_harbor_results(attempt, required=evaluator_config.get("engine") == "harbor")
+    audit_failure = "; ".join(harbor_audit.failures)
+    stderr = completed.stderr
+    if audit_failure:
+        stderr = f"{stderr.rstrip()}\nEVOLVE_HARBOR_SMOKE_FAILED: {audit_failure}\n".lstrip("\n")
     return _write_result(
         attempt,
-        "passed" if completed.returncode == 0 else "failed",
+        "passed" if completed.returncode == 0 and not audit_failure else "failed",
         snapshot.tree,
         completed.returncode,
         _redact(completed.stdout, source_environment),
-        _redact(completed.stderr, source_environment),
+        _redact(stderr, source_environment),
         time.monotonic() - started,
         mode=mode,
+        harbor_audit=harbor_audit if harbor_audit.observed or harbor_audit.required else None,
     )
 
 
@@ -169,6 +176,7 @@ def _write_result(
     duration_s: float,
     *,
     mode: SmokeMode,
+    harbor_audit: HarborTaskAudit | None = None,
 ) -> SmokeResult:
     stdout_path = attempt / "stdout.log"
     stderr_path = attempt / "stderr.log"
@@ -186,6 +194,8 @@ def _write_result(
             "stderr": _log_artifact(stderr_path),
         },
     }
+    if harbor_audit is not None:
+        payload["harbor_task_audit"] = harbor_audit.payload()
     if failure_category := _structured_failure_category(attempt):
         payload["failure_category"] = failure_category
     write_private_text(
