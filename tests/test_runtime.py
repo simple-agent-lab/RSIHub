@@ -481,3 +481,11 @@ def test_runtime_task_selection_rejects_ambiguous_harbor_suffix(tmp_path: Path) 
     selection.write_text(json.dumps({"split": "train", "tasks": ["vendor__suite__task-001"]}))
 
     assert execution_module._runtime_selection_matches(tmp_path, identity) is False
+
+
+def test_runtime_task_selection_prefers_limited_run_plan_over_full_split(tmp_path: Path) -> None:
+    identity = task_set_identity("fixture", 1, ("task-001",))
+    (tmp_path / "task-split.json").write_text(json.dumps({"split": "train", "tasks": ["task-001", "task-002"]}))
+    (tmp_path / "run-plan.json").write_text(json.dumps({"tasks": ["task-001"]}))
+
+    assert execution_module._runtime_selection_matches(tmp_path, identity) is True

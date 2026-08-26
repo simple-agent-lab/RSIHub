@@ -376,7 +376,10 @@ def _runtime_selection_matches(
         return True
     selection = run_dir / "task-split.json"
     plan = run_dir / "run-plan.json"
-    source = selection if selection.is_file() else plan
+    # The run plan is the authoritative, already-limited task set.  A frozen
+    # split receipt can legitimately contain the whole split when a smoke or
+    # capability run applies ``task_limit`` afterwards.
+    source = plan if plan.is_file() else selection
     if not source.is_file():
         return False
     try:
@@ -440,6 +443,11 @@ def _run_eval_script(
     env: dict[str, str] = {
         **(process_environment or source_environment),
         **environment_plan.process_env(),
+        # Harbor may change its process cwd while constructing trials.  Pin the
+        # trusted detached checkout so candidate-local import paths such as
+        # ``target.agent:HarborAgent`` remain resolvable without inheriting a
+        # caller-controlled PYTHONPATH.
+        "PYTHONPATH": str(checkout.resolve()),
         "EVOLVE_RUN_DIR": str(run_dir),
         "EVOLVE_GENID": genid,
         "EVOLVE_EVAL_KIND": purpose,
