@@ -386,7 +386,28 @@ def _runtime_selection_matches(
     tasks = payload.get("tasks") if isinstance(payload, dict) else None
     if not isinstance(tasks, list) or any(not isinstance(task, str) or not task for task in tasks):
         return False
-    return tuple(sorted(set(tasks))) == tuple(sorted(set(planned_members)))
+    expected = set(planned_members)
+    normalized = tuple(_normalize_runtime_task_id(task, expected) for task in tasks)
+    return tuple(sorted(set(normalized))) == tuple(sorted(expected))
+
+
+def _normalize_runtime_task_id(task_id: str, expected_task_ids: set[str]) -> str:
+    """Map Harbor-qualified task names back to their frozen dataset identity.
+
+    Harbor reports ``task.name`` from task.toml, while RSIHub freezes local
+    dataset-directory names.  Official datasets commonly qualify the former as
+    ``namespace/dataset__directory-name``.  Accept that representation only
+    when its suffix resolves to exactly one frozen member; ambiguous or
+    unrelated names remain mismatches.
+    """
+    if task_id in expected_task_ids:
+        return task_id
+    matches = [
+        expected
+        for expected in expected_task_ids
+        if task_id.endswith(f"__{expected}") or task_id.endswith(f"/{expected}")
+    ]
+    return matches[0] if len(matches) == 1 else task_id
 
 
 def _expected_trials(evaluator: dict[str, Any], task_limit: int | None, *, selected_tasks: int | None = None) -> int:

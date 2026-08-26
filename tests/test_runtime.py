@@ -458,3 +458,26 @@ def test_runtime_task_selection_must_match_planned_members_after_normalization(t
 
     selection.write_text(json.dumps({"split": "train", "tasks": ["third"]}))
     assert execution_module._runtime_selection_matches(tmp_path, identity) is False
+
+
+def test_runtime_task_selection_accepts_unique_harbor_qualified_names(tmp_path: Path) -> None:
+    identity = task_set_identity("fixture", 1, ("tau3-banking_knowledge-task-001",))
+    selection = tmp_path / "task-split.json"
+    selection.write_text(
+        json.dumps(
+            {
+                "split": "train",
+                "tasks": ["sierra-research/tau3-bench__tau3-banking_knowledge-task-001"],
+            }
+        )
+    )
+
+    assert execution_module._runtime_selection_matches(tmp_path, identity) is True
+
+
+def test_runtime_task_selection_rejects_ambiguous_harbor_suffix(tmp_path: Path) -> None:
+    identity = task_set_identity("fixture", 1, ("task-001", "suite__task-001"))
+    selection = tmp_path / "task-split.json"
+    selection.write_text(json.dumps({"split": "train", "tasks": ["vendor__suite__task-001"]}))
+
+    assert execution_module._runtime_selection_matches(tmp_path, identity) is False
