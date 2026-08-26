@@ -189,7 +189,7 @@ runtime_mounts=$(cat "$EVOLVE_RUN_DIR/candidate-runtime.mounts.json")
 # this cache to a different container UID. Do not chmod already-readable files:
 # they may have been created by that UID and be immutable to the host user.
 if ! mkdir -p "$EVOLVE_UV_CACHE_DIR" \
-  || ! find "$EVOLVE_UV_CACHE_DIR" -type d ! -perm -0007 -exec chmod a+rwx {} + \
+  || ! find "$EVOLVE_UV_CACHE_DIR" -type d ! -perm -0005 -exec chmod a+rwx {} + \
   || ! find "$EVOLVE_UV_CACHE_DIR" -type f ! -perm -0004 -exec chmod a+rw {} +; then
   printf 'shared uv cache is not accessible to task containers: %s\n' \
     "$EVOLVE_UV_CACHE_DIR" >&2

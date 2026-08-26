@@ -53,7 +53,7 @@ def test_harbor_evaluator_uses_locked_workspace_runtime() -> None:
     assert 'umask 000\n  exec "$UV" "$@"' in text
     assert 'umask 077; exec "$@"' in text
     assert 'mkdir -p "$EVOLVE_UV_CACHE_DIR"' in text
-    assert "! -perm -0007 -exec chmod a+rwx {} +" in text
+    assert "! -perm -0005 -exec chmod a+rwx {} +" in text
     assert "! -perm -0004 -exec chmod a+rw {} +" in text
 
 
