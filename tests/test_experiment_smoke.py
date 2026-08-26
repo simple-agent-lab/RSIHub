@@ -3,9 +3,38 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import yaml
 from conftest import git, init_workspace, rows_by_genid, smoke_agent_command
 
-from evolve.experiment_smoke import run_experiment_smoke
+from evolve.experiment_smoke import _limit_operator_workload, run_experiment_smoke
+
+
+def test_experiment_smoke_limits_method_owned_task_volume() -> None:
+    config = {
+        "operators": {
+            "rollout": {"config": {"budget_tasks": 50, "n_concurrent": 10, "field_limit": 2000}},
+            "analyze": {
+                "config": {
+                    "max_tasks": 30,
+                    "max_cases": 10,
+                    "judge_max_concurrent": 15,
+                }
+            },
+            "mutate": {"config": {"max_examples": 10}},
+            "validate": {"config": {"max_concurrent": 10}},
+        }
+    }
+
+    _limit_operator_workload(config)
+
+    assert config == {
+        "operators": {
+            "rollout": {"config": {"budget_tasks": 1, "n_concurrent": 1, "field_limit": 2000}},
+            "analyze": {"config": {"max_tasks": 1, "max_cases": 1, "judge_max_concurrent": 1}},
+            "mutate": {"config": {"max_examples": 1}},
+            "validate": {"config": {"max_concurrent": 1}},
+        }
+    }
 
 
 def test_experiment_smoke_runs_in_isolated_clone_and_produces_real_child(
@@ -54,3 +83,7 @@ def test_experiment_smoke_runs_in_isolated_clone_and_produces_real_child(
     assert child["outcome"] == "benchmark_complete"
     assert child["selection_eligible"] is True
     assert result.result_path.is_file()
+    smoke_config = yaml.safe_load((result.workspace / "evolve.yaml").read_text())
+    assert smoke_config["evaluator"]["tasks_per_round"] == 1
+    assert smoke_config["evaluator"]["n_concurrent"] == 1
+    assert smoke_config["operators"]["rollout"]["config"]["budget_tasks"] == 1

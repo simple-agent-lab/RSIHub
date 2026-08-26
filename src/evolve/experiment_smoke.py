@@ -5,6 +5,7 @@ import shutil
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -72,6 +73,30 @@ def _rewrite_eval_env(path: Path) -> None:
     path.write_text("\n".join(lines) + "\n")
 
 
+def _limit_operator_workload(config: dict[str, Any]) -> None:
+    """Keep method-owned rollout/analysis/validation work inside the one-task smoke budget."""
+    operators = config.get("operators")
+    if not isinstance(operators, dict):
+        return
+    limited_keys = {
+        "budget_tasks",
+        "judge_max_concurrent",
+        "max_cases",
+        "max_concurrent",
+        "max_examples",
+        "max_tasks",
+        "n_concurrent",
+    }
+    for stage in operators.values():
+        if not isinstance(stage, dict):
+            continue
+        stage_config = stage.get("config")
+        if not isinstance(stage_config, dict):
+            continue
+        for key in limited_keys & stage_config.keys():
+            stage_config[key] = 1
+
+
 def _prepare_smoke_workspace(source: Path, destination: Path, task: str, _digest: str) -> None:
     # The destination is inside source/runs; pack transport avoids macOS local-clone copy races.
     git(source, "clone", "--quiet", "--no-local", str(source), str(destination))
@@ -101,6 +126,7 @@ def _prepare_smoke_workspace(source: Path, destination: Path, task: str, _digest
     evaluator.pop("k", None)
     evaluator["repetitions"] = 1
     evaluator["n_concurrent"] = 1
+    _limit_operator_workload(config)
     split_path = destination / "evaluator" / "splits.json"
     split = json.loads(split_path.read_text())
     task_splits = split.get("tasks")
