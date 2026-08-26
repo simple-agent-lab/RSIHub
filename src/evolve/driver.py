@@ -462,8 +462,20 @@ def _repair_locked(workspace: Path) -> list[str]:
             remove_worktree(workspace, path)
             actions.append(f"removed stale worktree {path.name}")
     managed_root = worktrees.resolve()
+    evaluation_root = (workspace / "runs" / "evaluation-worktrees").resolve()
     for path in _workspace_child_worktrees(workspace):
         if path.is_relative_to(managed_root):
+            continue
+        if path.is_relative_to(evaluation_root):
+            changed = dirty_paths(path)
+            if changed:
+                actions.append(f"preserved dirty evaluation worktree {path}: {', '.join(changed)}")
+                continue
+            parent = path.parent
+            remove_worktree(workspace, path)
+            if parent != evaluation_root and parent.exists() and not any(parent.iterdir()):
+                parent.rmdir()
+            actions.append(f"removed stale evaluation worktree {path}")
             continue
         actions.append(f"preserved linked worktree outside runs/worktrees: {path}")
     git(workspace, "worktree", "prune", check=False)

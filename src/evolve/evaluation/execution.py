@@ -66,7 +66,9 @@ def evaluate(
     evaluator_fingerprint = evaluator_tree(workspace, tag)
     if evaluator_fingerprint != evaluator_tree(workspace, "gen/0"):
         raise RuntimeError(f"evaluator tree for {tag} differs from gen/0")
-    with tempfile.TemporaryDirectory(prefix="evolve-eval-") as tempdir:
+    evaluation_worktrees = workspace / "runs" / "evaluation-worktrees"
+    evaluation_worktrees.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="evolve-eval-", dir=evaluation_worktrees) as tempdir:
         checkout = Path(tempdir) / "checkout"
         git(workspace, "worktree", "add", "--detach", str(checkout), candidate_commit)
         cleanup_needed = True
