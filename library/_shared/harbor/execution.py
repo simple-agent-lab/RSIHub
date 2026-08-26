@@ -17,7 +17,7 @@ from typing import Any
 from evolve.frozen.interfaces import OperatorContext, RolloutResult
 from evolve.splits import harbor_task_pattern, select_dataset_tasks
 
-from .evidence import _PROXY_ENV, _load_eval_env, _redact
+from .evidence import _PROXY_ENV, _canonical_task_name, _load_eval_env, _redact
 
 
 def _jobs_root(ctx: OperatorContext) -> Path:
@@ -187,18 +187,14 @@ def _select_train_tasks(
         or not all(isinstance(item, str) and item for item in requested)
     ):
         raise ValueError("task_names must be a non-empty list of task names")
-    train_set = set(all_train)
     normalized: list[str] = []
     unknown: list[str] = []
     for name in requested:
-        if name in train_set:
-            normalized.append(name)
-            continue
-        leaf = name.rsplit("/", 1)[-1] if "/" in name else ""
-        if leaf in train_set:
-            normalized.append(leaf)
-        else:
+        canonical = _canonical_task_name(name, all_train)
+        if canonical is None:
             unknown.append(name)
+        else:
+            normalized.append(canonical)
     if unknown:
         raise ValueError("task_names must come from the frozen train split: " + ", ".join(unknown))
     if len(set(normalized)) != len(normalized):
