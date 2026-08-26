@@ -185,10 +185,12 @@ then
   exit 3
 fi
 runtime_mounts=$(cat "$EVOLVE_RUN_DIR/candidate-runtime.mounts.json")
-# Normalize entries left by older callers before Harbor exposes this cache to
-# a different container UID. The cache stores dependencies, not credentials or
-# evaluation evidence.
-if ! mkdir -p "$EVOLVE_UV_CACHE_DIR" || ! chmod -R a+rwX "$EVOLVE_UV_CACHE_DIR"; then
+# Normalize inaccessible entries left by older callers before Harbor exposes
+# this cache to a different container UID. Do not chmod already-readable files:
+# they may have been created by that UID and be immutable to the host user.
+if ! mkdir -p "$EVOLVE_UV_CACHE_DIR" \
+  || ! find "$EVOLVE_UV_CACHE_DIR" -type d ! -perm -0007 -exec chmod a+rwx {} + \
+  || ! find "$EVOLVE_UV_CACHE_DIR" -type f ! -perm -0004 -exec chmod a+rw {} +; then
   printf 'shared uv cache is not accessible to task containers: %s\n' \
     "$EVOLVE_UV_CACHE_DIR" >&2
   printf 'infra_failed\n' > "$EVOLVE_RUN_DIR/status"
