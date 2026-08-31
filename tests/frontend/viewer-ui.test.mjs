@@ -69,6 +69,8 @@ test('lineage chart preserves branches and highlights the champion ancestry', ()
   assert.match(html, />gen-0<.*>gen-1<.*>gen-2<.*>gen-10 ★</s);
   assert.match(html, /<rect width="120" height="46" rx="7"><\/rect>/);
   assert.match(html, /Rejected candidate/);
+  assert.match(html, /Not evaluated/);
+  assert.doesNotMatch(html, /no score\s*<tspan>score/);
   assert.match(html, /Generation 10 · 40% · evaluated/);
 });
 

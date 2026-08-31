@@ -104,9 +104,10 @@ export function lineageChart(generations, selected) {
     const terminal = ['candidate_invalid', 'infra_failed', 'infrastructure_failed', 'invalid_proposal', 'no_proposal', 'operator_failed', 'rejected_duplicate', 'rejected_validation'].includes(item.status);
     const active = selectedId != null && String(item.genid) === selectedId;
     const score = item.score == null ? 'no score' : `${(Number(item.score) * 100).toFixed(0)}%`;
+    const scoreLine = item.score == null ? 'Not evaluated' : `${score} <tspan>score</tspan>`;
     const point = positions.get(String(item.genid));
     const state = item.parent == null ? 'Seed' : terminal ? 'Rejected candidate' : item.score == null ? 'Awaiting evaluation' : 'Valid candidate';
-    return `<g class="lineage-node ${terminal ? 'rejected' : ''} ${active ? 'champion' : ''}" transform="translate(${point.x} ${point.y})"><title>Generation ${escapeSvg(item.genid)} · ${score} · ${escapeSvg(item.status)}</title><rect width="${cardWidth}" height="${cardHeight}" rx="7"></rect><text class="lineage-node-title" x="10" y="15">gen-${escapeSvg(item.genid)}${active ? ' ★' : ''}</text><text class="lineage-node-score" x="10" y="29">${score} <tspan>score</tspan></text><text class="lineage-node-state" x="10" y="41">${state}</text></g>`;
+    return `<g class="lineage-node ${terminal ? 'rejected' : ''} ${active ? 'champion' : ''}" transform="translate(${point.x} ${point.y})"><title>Generation ${escapeSvg(item.genid)} · ${score} · ${escapeSvg(item.status)}</title><rect width="${cardWidth}" height="${cardHeight}" rx="7"></rect><text class="lineage-node-title" x="10" y="15">gen-${escapeSvg(item.genid)}${active ? ' ★' : ''}</text><text class="lineage-node-score" x="10" y="29">${scoreLine}</text><text class="lineage-node-state" x="10" y="41">${state}</text></g>`;
   }).join('');
   return `<svg class="lineage-chart" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMinYMin meet" style="--lineage-width:${width}px;--lineage-height:${height}px" role="img" aria-label="Generation lineage with selection scores">${edges}${nodes}</svg>`;
 }
