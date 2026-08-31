@@ -16,7 +16,7 @@ operators:
   select: {operator: score_child_prop, config: {seed: 0}}
   rollout: {operator: parent_evaluation, timeout_s: 600, config: {field_limit: 2000}}
   analyze: {operator: trace_browser, timeout_s: 600, config: {max_chars: 30000}}
-  mutate: {operator: hyperagents, timeout_s: 21600, config: {runner: harbor, expose_gate_data: false, agent: codex, model: gpt-5.4, environment: docker, image: evolve-mutate-codex:20260818-codex0146, editable_roots: [target, operators], prompt_path: target/prompt.md, skills_dir: target/skills, memory_dir: target/memory, agent_kwargs: {reasoning_effort: high}, max_retries: 1}}
+  mutate: {operator: hyperagents, timeout_s: 21600, config: {runner: harbor, expose_gate_data: false, agent: codex, model: gpt-5.4, environment: docker, image: evolve-mutate-codex:20260818-codex0146, editable_roots: [target, operators], prompt_path: target/prompt.md, skills_dir: target/skills, memory_dir: target/memory, agent_kwargs: {reasoning_effort: xhigh}, max_retries: 1}}
   validate: {operator: hyperagents, timeout_s: 300, config: {}}
   gate: {operator: parent_eligible, config: {}}
   record: {operator: hyperagents, config: {}}

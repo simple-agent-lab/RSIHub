@@ -15,6 +15,9 @@
     },
     "mutate": {
       "agent": "codex",
+      "agent_kwargs": {
+        "reasoning_effort": "xhigh"
+      },
       "editable_roots": [
         "target"
       ],
@@ -67,21 +70,19 @@
     },
     "gate": {},
     "mutate": {
-      "agent": "evolve.integrations.harbor.miniswe_task_file:InstalledMiniSweAgent",
+      "agent": "codex",
       "agent_kwargs": {
-        "cost_limit": 0,
-        "max_tokens": 64000,
-        "reasoning_effort": "high"
+        "reasoning_effort": "xhigh"
       },
       "editable_roots": [
         "target"
       ],
       "environment": "docker",
       "expose_gate_data": false,
-      "image": "evolve-mutate-app:20260724-tools-mswe245",
+      "image": "evolve-mutate-codex:20260818-codex0146",
       "max_retries": 1,
       "memory_dir": "target/memory",
-      "model": "openai/gpt-5.4-2026-03-05",
+      "model": "gpt-5.4",
       "prompt_path": "target/src/minisweagent/config/mini.yaml",
       "runner": "harbor",
       "skills_dir": "target/skills"
@@ -112,7 +113,7 @@
     "mutate": {
       "agent": "codex",
       "agent_kwargs": {
-        "reasoning_effort": "high"
+        "reasoning_effort": "xhigh"
       },
       "editable_roots": [
         "target"
@@ -151,6 +152,9 @@
     "gate": {},
     "mutate": {
       "agent": "codex",
+      "agent_kwargs": {
+        "reasoning_effort": "xhigh"
+      },
       "component_strategy": "round_robin",
       "components": {
         "system_prompt": [
@@ -261,6 +265,9 @@
     },
     "mutate": {
       "agent": "codex",
+      "agent_kwargs": {
+        "reasoning_effort": "xhigh"
+      },
       "editable_roots": [
         "target"
       ],
@@ -301,6 +308,9 @@
     },
     "mutate": {
       "agent": "codex",
+      "agent_kwargs": {
+        "reasoning_effort": "xhigh"
+      },
       "editable_roots": [
         "target"
       ],
@@ -338,11 +348,9 @@
     },
     "gate": {},
     "mutate": {
-      "agent": "evolve.integrations.harbor.miniswe_task_file:InstalledMiniSweAgent",
+      "agent": "codex",
       "agent_kwargs": {
-        "cost_limit": 0,
-        "max_tokens": 64000,
-        "reasoning_effort": "high"
+        "reasoning_effort": "xhigh"
       },
       "editable_roots": [
         "target",
@@ -350,10 +358,10 @@
       ],
       "environment": "docker",
       "expose_gate_data": false,
-      "image": "evolve-mutate-app:20260724-tools-mswe245",
+      "image": "evolve-mutate-codex:20260818-codex0146",
       "max_retries": 1,
       "memory_dir": "target/memory",
-      "model": "openai/gpt-5.4-2026-03-05",
+      "model": "gpt-5.4",
       "prompt_path": "target/src/minisweagent/config/mini.yaml",
       "runner": "harbor",
       "skills_dir": "target/skills"
@@ -378,7 +386,7 @@
     "mutate": {
       "agent": "codex",
       "agent_kwargs": {
-        "reasoning_effort": "high"
+        "reasoning_effort": "xhigh"
       },
       "editable_roots": [
         "target",

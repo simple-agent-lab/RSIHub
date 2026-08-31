@@ -34,6 +34,7 @@ operators:
       model: gpt-5.4
       environment: docker
       image: evolve-mutate-codex:20260818-codex0146
+      agent_kwargs: {reasoning_effort: xhigh}
       editable_roots: [target]
       components:
         system_prompt: target/prompt.md

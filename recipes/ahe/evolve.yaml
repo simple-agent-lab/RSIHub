@@ -17,7 +17,7 @@ operators:
   select: {operator: ahe_latest, timeout_s: 600, config: {}}
   rollout: {operator: parent_evaluation, timeout_s: 600, config: {field_limit: 2000}}
   analyze: {operator: ahe, timeout_s: 3600, config: {max_tasks: 30, max_concurrent: 10, timeout_per_task: 600, retry_attempts: 1, debugger_agent_kwargs: {reasoning_effort: high, max_tokens: 64000}, field_limit: 2000}}
-  mutate: {operator: ahe, timeout_s: 3600, config: {runner: harbor, expose_gate_data: false, agent: evolve.integrations.harbor.miniswe_task_file:InstalledMiniSweAgent, model: openai/gpt-5.4-2026-03-05, environment: docker, image: evolve-mutate-app:20260724-tools-mswe245, editable_roots: [target], prompt_path: target/src/minisweagent/config/mini.yaml, skills_dir: target/skills, memory_dir: target/memory, agent_kwargs: {reasoning_effort: high, cost_limit: 0, max_tokens: 64000}, max_retries: 1}}
+  mutate: {operator: ahe, timeout_s: 3600, config: {runner: harbor, expose_gate_data: false, agent: codex, model: gpt-5.4, environment: docker, image: evolve-mutate-codex:20260818-codex0146, editable_roots: [target], prompt_path: target/src/minisweagent/config/mini.yaml, skills_dir: target/skills, memory_dir: target/memory, agent_kwargs: {reasoning_effort: xhigh}, max_retries: 1}}
   gate: {operator: ahe_artifact_valid, timeout_s: 600, config: {}}
   record: {operator: jsonl, timeout_s: 600, config: {}}
   timeout_s: 600
@@ -42,5 +42,6 @@ evaluator:
   agent_env:
     MINISWE_STEP_LIMIT: "100"
     MINISWE_REASONING_EFFORT: "high"
-    MINISWE_COST_LIMIT: "0"
+    MINISWE_COST_LIMIT: "3.0"
+    MINISWE_MAX_OUTPUT_LIMIT: "10000"
     MINISWE_ENV_TIMEOUT: "30"

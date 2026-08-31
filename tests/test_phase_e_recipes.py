@@ -20,7 +20,6 @@ UV_SOURCE_RECIPES = {"ahe", "hill_climb", "hyperagents"}
 MAIN_RECIPES = SUPPORTED_RECIPES - {"gepa_local"}
 TERMINAL_BENCH_DATASET = "terminal-bench-2-30-v1"
 CODEX_IMAGE = "evolve-mutate-codex:20260818-codex0146"
-MINISWE_IMAGE = "evolve-mutate-app:20260724-tools-mswe245"
 
 
 def _config(name: str) -> str:
@@ -39,8 +38,7 @@ def test_main_recipes_share_terminal_bench_and_explicit_mutate_images() -> None:
     for name in MAIN_RECIPES:
         config = _parsed_config(name)
         assert config["evaluator"]["dataset"] == TERMINAL_BENCH_DATASET
-        expected_image = MINISWE_IMAGE if name in {"ahe", "hyperagents"} else CODEX_IMAGE
-        assert _operator_config(name, "mutate")["image"] == expected_image
+        assert _operator_config(name, "mutate")["image"] == CODEX_IMAGE
 
 
 def test_all_recipes_are_recipe_artifacts_only() -> None:
@@ -177,20 +175,14 @@ def test_supported_recipes_use_harbor_and_method_mutate() -> None:
             assert mutate["agent"] == "evolve.integrations.harbor.local_auto_agent:LocalAutoAgent"
         elif name in {"ahe", "hyperagents"}:
             assert config["target"]["revision"] == "388da74aad620a384ab47669b17c52133e30e7c3"
-            assert mutate["agent"] == "evolve.integrations.harbor.miniswe_task_file:InstalledMiniSweAgent"
+            assert mutate["agent"] == "codex"
         else:
             assert mutate["agent"] == "codex"
 
 
-def test_ahe_and_hyperagents_share_the_pinned_mutate_image() -> None:
-    expected = "evolve-mutate-app:20260724-tools-mswe245"
-    for name in ("ahe", "hyperagents"):
-        assert _operator_config(name, "mutate")["image"] == expected
-
-
 def test_codex_mutates_use_the_preinstalled_codex_image() -> None:
     expected = "evolve-mutate-codex:20260818-codex0146"
-    for name in ("aevolve", "ahe_codex", "gepa", "hill_climb", "hill_climb_codex", "hyperagents_codex"):
+    for name in MAIN_RECIPES:
         assert _operator_config(name, "mutate")["image"] == expected
 
 
@@ -259,12 +251,12 @@ def test_all_explicit_recipe_retry_and_multiplier_values_are_one() -> None:
         assert "infra_repair_attempts" not in _config(name)
 
 
-def test_miniswe_method_agents_use_the_rollout_model_version() -> None:
+def test_miniswe_targets_and_codex_mutators_use_the_benchmark_models() -> None:
     expected_model = "openai/gpt-5.4-2026-03-05"
     for name in ("ahe", "hyperagents"):
         config = _parsed_config(name)
         mutate = _operator_config(name, "mutate")
-        assert mutate["model"] == expected_model
+        assert mutate["model"] == "gpt-5.4"
         evaluator = config["evaluator"]
         assert isinstance(evaluator, dict)
         assert evaluator["model"] == expected_model
@@ -332,31 +324,33 @@ def test_codex_mutate_image_pins_the_mutator_cli_version() -> None:
     assert "git config --system --add safe.directory /app/task/workspace" in dockerfile
 
 
-def test_ahe_recipe_configures_reasoning_without_cost_caps() -> None:
+def test_ahe_recipe_matches_reported_miniswe_target_limits() -> None:
     recipe = _parsed_config("ahe")
-    assert _operator_config("ahe", "mutate")["agent_kwargs"] == {
-        "reasoning_effort": "high",
-        "cost_limit": 0,
-        "max_tokens": 64_000,
-    }
+    assert _operator_config("ahe", "mutate")["agent_kwargs"] == {"reasoning_effort": "xhigh"}
     assert recipe["evaluator"]["agent_env"]["MINISWE_REASONING_EFFORT"] == "high"
-    assert recipe["evaluator"]["agent_env"]["MINISWE_COST_LIMIT"] == "0"
+    assert recipe["evaluator"]["agent_env"]["MINISWE_COST_LIMIT"] == "3.0"
+    assert recipe["evaluator"]["agent_env"]["MINISWE_MAX_OUTPUT_LIMIT"] == "10000"
 
 
-def test_hyperagents_recipe_configures_reasoning_without_cost_caps() -> None:
+def test_hyperagents_recipe_matches_reported_miniswe_target_limits() -> None:
     recipe = _parsed_config("hyperagents")
-    assert _operator_config("hyperagents", "mutate")["agent_kwargs"] == {
-        "reasoning_effort": "high",
-        "cost_limit": 0,
-        "max_tokens": 64_000,
-    }
+    assert _operator_config("hyperagents", "mutate")["agent_kwargs"] == {"reasoning_effort": "xhigh"}
     assert "budget_usd" not in recipe["experiment"]
     assert recipe["evaluator"]["agent_env"] == {
-        "MINISWE_COST_LIMIT": "0",
+        "MINISWE_COST_LIMIT": "3.0",
         "MINISWE_ENV_TIMEOUT": "30",
+        "MINISWE_MAX_OUTPUT_LIMIT": "10000",
         "MINISWE_REASONING_EFFORT": "high",
         "MINISWE_STEP_LIMIT": "100",
     }
+
+
+def test_benchmark_mutators_use_codex_xhigh() -> None:
+    for name in MAIN_RECIPES:
+        mutate = _operator_config(name, "mutate")
+        assert mutate["agent"] == "codex"
+        assert mutate["model"] == "gpt-5.4"
+        assert mutate["agent_kwargs"] == {"reasoning_effort": "xhigh"}
 
 
 def test_recipe_retry_and_partial_floor_defaults_remain_method_specific() -> None:

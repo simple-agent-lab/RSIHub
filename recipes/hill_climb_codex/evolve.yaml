@@ -16,7 +16,7 @@ operators:
   select: {operator: greedy, config: {}}
   rollout: {operator: harbor, timeout_s: 3600, config: {budget_tasks: 16, n_concurrent: 4, agent_setup_timeout_multiplier: 1, max_retries: 1}}
   analyze: {operator: failure_patterns, timeout_s: 600, config: {max_chars: 30000}}
-  mutate: {operator: hyperagents, timeout_s: 3600, config: {runner: harbor, expose_gate_data: false, agent: codex, model: gpt-5.4, environment: docker, image: evolve-mutate-codex:20260818-codex0146, editable_roots: [target], prompt_path: target/prompt.md, skills_dir: target/skills, memory_dir: target/memory, max_retries: 1}}
+  mutate: {operator: hyperagents, timeout_s: 3600, config: {runner: harbor, expose_gate_data: false, agent: codex, model: gpt-5.4, environment: docker, image: evolve-mutate-codex:20260818-codex0146, editable_roots: [target], prompt_path: target/prompt.md, skills_dir: target/skills, memory_dir: target/memory, agent_kwargs: {reasoning_effort: xhigh}, max_retries: 1}}
   gate: {operator: hillclimb, config: {}}
   record: {operator: jsonl, config: {}}
   timeout_s: 600

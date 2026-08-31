@@ -18,12 +18,13 @@ operators:
   select: {operator: greedy, config: {}}
   rollout: {operator: harbor, timeout_s: 3600, config: {budget_tasks: 32, n_concurrent: 16, agent_setup_timeout_multiplier: 1, max_retries: 1}}
   analyze: {operator: failure_patterns, timeout_s: 600, config: {max_chars: 30000}}
-  mutate: {operator: hyperagents, timeout_s: 3600, config: {runner: harbor, expose_gate_data: false, agent: codex, model: gpt-5.4, environment: docker, image: evolve-mutate-codex:20260818-codex0146, editable_roots: [target], prompt_path: target/src/minisweagent/config/mini.yaml, skills_dir: target/skills, memory_dir: target/memory, max_retries: 1}}
+  mutate: {operator: hyperagents, timeout_s: 3600, config: {runner: harbor, expose_gate_data: false, agent: codex, model: gpt-5.4, environment: docker, image: evolve-mutate-codex:20260818-codex0146, editable_roots: [target], prompt_path: target/src/minisweagent/config/mini.yaml, skills_dir: target/skills, memory_dir: target/memory, agent_kwargs: {reasoning_effort: xhigh}, max_retries: 1}}
   gate: {operator: hillclimb, config: {}}
   record: {operator: jsonl, config: {}}
   timeout_s: 600
 evaluator:
   engine: harbor
+  model: openai/gpt-5.4-2026-03-05
   runtime:
     candidate: {variant: uv, project: target, python: "3.12"}
   dataset: terminal-bench-2-30-v1
@@ -37,3 +38,9 @@ evaluator:
   max_retries: 1
   benchmark_timeout_is_zero: true
   partial_floor: 0.8
+  agent_env:
+    MINISWE_STEP_LIMIT: "100"
+    MINISWE_REASONING_EFFORT: "high"
+    MINISWE_COST_LIMIT: "3.0"
+    MINISWE_MAX_OUTPUT_LIMIT: "10000"
+    MINISWE_ENV_TIMEOUT: "30"

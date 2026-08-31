@@ -16,8 +16,8 @@ represents.
 - [HyperAgents for Codex](hyperagents_codex/README.md)
 
 All main recipes use the shared, content-pinned Terminal-Bench 2.0 subset. The
-setup script downloads and verifies it and builds only the selected recipe's
-pinned MiniSWE or Codex mutation-agent image:
+setup script downloads and verifies it and builds the pinned Codex 0.146.0
+mutation-agent image used by the benchmark recipes:
 
 ```bash
 ./scripts/setup_terminal_bench.sh gepa

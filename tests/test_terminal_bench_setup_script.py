@@ -155,7 +155,7 @@ def test_setup_rejects_an_existing_incomplete_raw_directory(tmp_path: Path) -> N
     assert not any(call[0:5] == ["uv", "run", "--frozen", "harbor", "download"] for call in _calls(calls_path))
 
 
-def test_setup_downloads_once_and_builds_miniswe_image_for_ahe(tmp_path: Path) -> None:
+def test_setup_downloads_once_and_builds_codex_image_for_ahe(tmp_path: Path) -> None:
     environment, calls_path = _environment(tmp_path)
 
     first = subprocess.run(
@@ -181,7 +181,7 @@ def test_setup_downloads_once_and_builds_miniswe_image_for_ahe(tmp_path: Path) -
     )
     builds = [call for call in calls if call[:2] == ["docker", "build"]]
     assert len(builds) == 1
-    assert "evolve-mutate-app:20260724-tools-mswe245" in builds[0]
+    assert "evolve-mutate-codex:20260818-codex0146" in builds[0]
     assert "./scripts/run_recipe_demo.sh ahe" in second.stdout
 
 

@@ -188,8 +188,8 @@ def test_ahe_debugger_reuses_only_allowlisted_mutate_config(tmp_path: Path) -> N
     [
         (
             "ahe",
-            "evolve.integrations.harbor.miniswe_task_file:InstalledMiniSweAgent",
-            "openai/gpt-5.4-2026-03-05",
+            "codex",
+            "gpt-5.4",
         ),
         ("ahe_codex", "codex", "gpt-5.4"),
     ],

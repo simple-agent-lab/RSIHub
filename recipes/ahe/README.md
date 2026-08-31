@@ -9,10 +9,9 @@ debugger input, so its score
 and debugger evidence come from the same retained Harbor trajectories rather
 than a separate rollout run. Each task receives one required LLM debugger
 analysis using the same model and runner as the mutate operator. The debugger uses
-`high` reasoning so its short MiniSWE protocol reliably reaches the required
-tool call; the change-producing mutation agent also uses `high`. Both paths receive
-an explicit 64k output budget through Harbor's `max_tokens` constructor field
-because mini-swe-agent otherwise uses its 1,000-token default. Failures
+`high` reasoning and an explicit 64k output budget. The change-producing
+mutation agent is Codex CLI 0.146.0 with `xhigh` reasoning, matching the
+benchmark configuration used for the reported AHE runs. Failures
 stop the generation after three attempts; there is no silent deterministic
 fallback. This is configured as `debugger_max_retries: 2`: one initial
 debugger call plus at most two retries.
@@ -71,12 +70,13 @@ temporary limits for the canonical full analysis. The `mutate` stage is
 optional on this path and remains the mutation stage for `evolve run`.
 
 Live runs need Docker, Harbor, model credentials, and an immutable evaluator
-runtime. Build the small workspace image once before running:
+runtime. Build the pinned Codex mutation image once before running:
 
 ```bash
-IMAGE_CONTEXT="$(python -c 'from evolve.config import resource_root; print(resource_root("containers") / "mutate")')"
-docker build --build-arg MINISWE_VERSION=2.4.5 \
-  -t evolve-mutate-app:20260724-tools-mswe245 "$IMAGE_CONTEXT"
+IMAGE_CONTEXT="$(python -c 'from evolve.config import resource_root; print(resource_root("containers") / "mutate-codex")')"
+docker build --build-arg CODEX_VERSION=0.146.0 \
+  -t evolve-mutate-codex:20260818-codex0146 "$IMAGE_CONTEXT"
 ```
 
-The recipe never requires a local Codex command.
+Codex is preinstalled in the image; the recipe does not require a host Codex
+installation.
