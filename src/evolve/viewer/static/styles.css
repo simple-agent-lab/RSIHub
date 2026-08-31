@@ -130,8 +130,8 @@ main.diff-mode { width: min(var(--diff-content-max), 100%); }
 .champion-diff-actions span { color: var(--muted); font-size: 9px; }
 .evolution-lineage-card { padding-bottom: 15px; }
 .evolution-lineage-card .card-header { margin-bottom: 13px; }
-.lineage-box { position: relative; padding: 13px; overflow: auto; background: #f8faf9; border: 1px solid #dce4e0; border-radius: 16px; box-shadow: inset 0 1px 0 rgb(255 255 255 / 80%), 0 7px 20px rgb(31 55 45 / 5%); }
-.lineage-box svg { display: block; width: max(100%, var(--lineage-width)); min-width: var(--lineage-width); height: var(--lineage-height); overflow: visible; }
+.lineage-box { position: relative; max-height: min(380px, 55vh); padding: 13px; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; touch-action: pan-x pan-y; background: #f8faf9; border: 1px solid #dce4e0; border-radius: 16px; box-shadow: inset 0 1px 0 rgb(255 255 255 / 80%), 0 7px 20px rgb(31 55 45 / 5%); }
+.lineage-box svg { display: block; width: var(--lineage-width); min-width: var(--lineage-width); max-width: none; height: var(--lineage-height); min-height: var(--lineage-height); overflow: visible; }
 .lineage-edge { fill: none; stroke: #96c8ba; stroke-width: 1.45; vector-effect: non-scaling-stroke; }
 .lineage-edge.champion-path { stroke: #58a992; stroke-width: 2; }
 .lineage-node rect { fill: #fff; stroke: #16856f; stroke-width: 1.7; vector-effect: non-scaling-stroke; }
