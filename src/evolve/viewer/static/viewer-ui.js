@@ -46,31 +46,69 @@ export function generationLineage(generations, selectedId) {
 export function lineageChart(generations, selected) {
   const ordered = [...generations].sort((left, right) => compareGenerationIds(left.genid, right.genid));
   if (!ordered.length) return '<div class="empty">No generations recorded.</div>';
-  const width = 560;
-  const height = 92;
-  const maxGeneration = Math.max(10, ...ordered.map((item) => Math.max(0, generationKey(item.genid)[0])));
-  const x = (item) => 24 + (Math.max(0, generationKey(item.genid)[0]) / maxGeneration) * (width - 48);
-  const y = (item) => item.score == null ? 76 : 68 - Math.max(0, Math.min(1, Number(item.score))) * 55;
   const byId = new Map(ordered.map((item) => [String(item.genid), item]));
   const selectedId = selected == null ? null : String(selected.genid ?? selected);
   const selectedPath = new Set(generationLineage(ordered, selectedId).map((item) => String(item.genid)));
+  const depths = new Map();
+  const depthOf = (item, trail = new Set()) => {
+    const id = String(item.genid);
+    if (depths.has(id)) return depths.get(id);
+    if (trail.has(id) || item.parent == null || !byId.has(String(item.parent))) {
+      depths.set(id, 0);
+      return 0;
+    }
+    const nextTrail = new Set(trail);
+    nextTrail.add(id);
+    const parentDepth = depthOf(byId.get(String(item.parent)), nextTrail);
+    if (depths.has(id)) return depths.get(id);
+    const depth = parentDepth + 1;
+    depths.set(id, depth);
+    return depth;
+  };
+  ordered.forEach((item) => depthOf(item));
+  const columns = new Map();
+  ordered.forEach((item) => {
+    const depth = depths.get(String(item.genid));
+    if (!columns.has(depth)) columns.set(depth, []);
+    columns.get(depth).push(item);
+  });
+  const cardWidth = 148;
+  const cardHeight = 58;
+  const columnGap = 78;
+  const rowGap = 14;
+  const padding = 18;
+  const columnCount = Math.max(...columns.keys()) + 1;
+  const rowCount = Math.max(...[...columns.values()].map((items) => items.length));
+  const width = padding * 2 + columnCount * cardWidth + Math.max(0, columnCount - 1) * columnGap;
+  const height = padding * 2 + rowCount * cardHeight + Math.max(0, rowCount - 1) * rowGap;
+  const positions = new Map();
+  for (const [depth, items] of columns) {
+    items.forEach((item, row) => positions.set(String(item.genid), {
+      x: padding + depth * (cardWidth + columnGap),
+      y: padding + row * (cardHeight + rowGap),
+    }));
+  }
   const edges = ordered.filter((item) => item.parent != null && byId.has(String(item.parent))).map((item) => {
     const parent = byId.get(String(item.parent));
-    const mid = (x(parent) + x(item)) / 2;
+    const start = positions.get(String(parent.genid));
+    const end = positions.get(String(item.genid));
+    const startX = start.x + cardWidth;
+    const startY = start.y + cardHeight / 2;
+    const endX = end.x;
+    const endY = end.y + cardHeight / 2;
+    const mid = (startX + endX) / 2;
     const active = selectedPath.has(String(item.genid)) && selectedPath.has(String(parent.genid));
-    return `<path class="lineage-edge ${active ? 'champion-path' : ''}" d="M ${x(parent)} ${y(parent)} C ${mid} ${y(parent)}, ${mid} ${y(item)}, ${x(item)} ${y(item)}"></path>`;
+    return `<path class="lineage-edge ${active ? 'champion-path' : ''}" d="M ${startX} ${startY} C ${mid} ${startY}, ${mid} ${endY}, ${endX} ${endY}"></path>`;
   }).join('');
   const nodes = ordered.map((item) => {
-    const terminal = ['rejected_validation', 'operator_failed', 'candidate_invalid', 'infra_failed', 'infrastructure_failed'].includes(item.status);
+    const terminal = ['candidate_invalid', 'infra_failed', 'infrastructure_failed', 'invalid_proposal', 'no_proposal', 'operator_failed', 'rejected_duplicate', 'rejected_validation'].includes(item.status);
     const active = selectedId != null && String(item.genid) === selectedId;
     const score = item.score == null ? 'no score' : `${(Number(item.score) * 100).toFixed(0)}%`;
-    return `<circle class="lineage-node ${terminal ? 'rejected' : ''} ${active ? 'champion' : ''}" cx="${x(item)}" cy="${y(item)}" r="${active ? 5 : 3.8}"><title>Generation ${escapeSvg(item.genid)} · ${score} · ${escapeSvg(item.status)}</title></circle>`;
+    const point = positions.get(String(item.genid));
+    const state = item.parent == null ? 'Seed' : terminal ? 'Rejected candidate' : item.score == null ? 'Awaiting evaluation' : 'Valid candidate';
+    return `<g class="lineage-node ${terminal ? 'rejected' : ''} ${active ? 'champion' : ''}" transform="translate(${point.x} ${point.y})"><title>Generation ${escapeSvg(item.genid)} · ${score} · ${escapeSvg(item.status)}</title><rect width="${cardWidth}" height="${cardHeight}" rx="9"></rect><text class="lineage-node-title" x="12" y="18">gen-${escapeSvg(item.genid)}${active ? ' ★' : ''}</text><text class="lineage-node-score" x="12" y="36">${score} <tspan>score</tspan></text><text class="lineage-node-state" x="12" y="51">${state}</text></g>`;
   }).join('');
-  const labels = [0, maxGeneration / 2, maxGeneration].map((value) => {
-    const generation = Number.isInteger(value) ? value : Number(value.toFixed(1));
-    return `<text class="lineage-axis-label" x="${24 + value / maxGeneration * (width - 48)}" y="90" text-anchor="middle">G${generation}</text>`;
-  }).join('');
-  return `<svg class="lineage-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Generation lineage with selection scores"><line class="lineage-axis-line" x1="24" y1="78" x2="${width - 24}" y2="78"></line>${edges}${nodes}${labels}</svg>`;
+  return `<svg class="lineage-chart" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMinYMin meet" style="--lineage-width:${width}px;--lineage-height:${height}px" role="img" aria-label="Generation lineage with selection scores">${edges}${nodes}</svg>`;
 }
 
 export function artifactHref(id) {

@@ -109,15 +109,19 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 .score-arrow { padding-bottom: 4px; color: var(--line-strong); font-size: 17px; }
 .score-delta { align-self: center; padding: 5px 7px; color: #126842; background: var(--accent-soft); border-radius: 7px; font-size: 10px; font-weight: 700; }
 .score-delta.negative { color: var(--danger); background: var(--danger-soft); }
-.lineage-box { position: relative; min-height: 116px; padding: 9px 8px 2px; overflow: hidden; background: var(--canvas); border: 1px solid var(--line); border-radius: 10px; }
-.lineage-box svg { width: 100%; height: 100px; display: block; overflow: visible; }
-.lineage-edge { fill: none; stroke: #aebdb6; stroke-width: 1.2; }
-.lineage-edge.champion-path { stroke: #4c9a73; stroke-width: 1.8; }
-.lineage-node { fill: var(--blue); stroke: white; stroke-width: 1.6; }
-.lineage-node.champion { fill: var(--accent); stroke: #b8d9c8; stroke-width: 3; }
-.lineage-node.rejected { fill: var(--danger); }
-.lineage-axis-line { stroke: #dce3df; stroke-width: 1; }
-.lineage-axis-label { fill: var(--subtle); font: 8px var(--mono); }
+.lineage-box { position: relative; padding: 10px; overflow: auto; background: #f8faf9; border: 1px solid #dce4e0; border-radius: 14px; box-shadow: inset 0 1px 0 rgb(255 255 255 / 80%), 0 6px 18px rgb(31 55 45 / 5%); }
+.lineage-box svg { display: block; width: max(100%, var(--lineage-width)); min-width: var(--lineage-width); height: var(--lineage-height); overflow: visible; }
+.lineage-edge { fill: none; stroke: #96c8ba; stroke-width: 1.45; vector-effect: non-scaling-stroke; }
+.lineage-edge.champion-path { stroke: #58a992; stroke-width: 2; }
+.lineage-node rect { fill: #fff; stroke: #16856f; stroke-width: 1.7; vector-effect: non-scaling-stroke; }
+.lineage-node.rejected rect { stroke: #c75a4a; stroke-dasharray: 5 3; }
+.lineage-node.champion rect { stroke: #087763; stroke-width: 2.8; }
+.lineage-node text { pointer-events: none; }
+.lineage-node-title { fill: #20332d; font: 700 12px var(--mono); }
+.lineage-node-score { fill: #137663; font: 700 10px var(--mono); }
+.lineage-node-score tspan { font-weight: 600; }
+.lineage-node-state { fill: #7b8e87; font: 9px var(--sans); }
+.lineage-node.rejected .lineage-node-score { fill: #a9483b; }
 .card-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 10px; }
 .open-label { color: #24664c; font-weight: 700; }
 .loading-panel, .empty-panel { min-height: 220px; display: flex; align-items: center; justify-content: center; gap: 18px; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
