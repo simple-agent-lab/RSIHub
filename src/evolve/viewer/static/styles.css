@@ -131,7 +131,7 @@ main.diff-mode { width: min(var(--diff-content-max), 100%); }
 .evolution-lineage-card { padding-bottom: 15px; }
 .evolution-lineage-card .card-header { margin-bottom: 13px; }
 .lineage-box { position: relative; max-height: min(440px, 65vh); padding: 13px; overflow: auto; overscroll-behavior: contain; scrollbar-color: #b8c8c1 transparent; scrollbar-width: thin; touch-action: pan-x pan-y; background: #fafcfb; border: 1px solid #e2e9e5; border-radius: 16px; }
-.lineage-box svg { display: block; width: var(--lineage-width); min-width: var(--lineage-width); max-width: none; height: var(--lineage-height); min-height: var(--lineage-height); overflow: visible; }
+.lineage-box svg { display: block; width: var(--lineage-width); min-width: var(--lineage-width); max-width: none; height: var(--lineage-height); min-height: var(--lineage-height); margin-inline: auto; overflow: visible; }
 .lineage-box::-webkit-scrollbar { width: 8px; height: 8px; }
 .lineage-box::-webkit-scrollbar-track, .lineage-box::-webkit-scrollbar-corner { background: transparent; }
 .lineage-box::-webkit-scrollbar-thumb { background: #b8c8c1; background-clip: padding-box; border: 2px solid transparent; border-radius: 999px; }

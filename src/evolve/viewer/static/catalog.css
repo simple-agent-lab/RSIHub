@@ -110,7 +110,7 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 .score-delta { align-self: center; padding: 5px 7px; color: #126842; background: var(--accent-soft); border-radius: 7px; font-size: 10px; font-weight: 700; }
 .score-delta.negative { color: var(--danger); background: var(--danger-soft); }
 .lineage-box { position: relative; max-height: min(360px, 58vh); padding: 10px; overflow: auto; overscroll-behavior: contain; scrollbar-color: #b8c8c1 transparent; scrollbar-width: thin; touch-action: pan-x pan-y; background: #fafcfb; border: 1px solid #e2e9e5; border-radius: 14px; }
-.lineage-box svg { display: block; width: var(--lineage-width); min-width: var(--lineage-width); max-width: none; height: var(--lineage-height); min-height: var(--lineage-height); overflow: visible; }
+.lineage-box svg { display: block; width: var(--lineage-width); min-width: var(--lineage-width); max-width: none; height: var(--lineage-height); min-height: var(--lineage-height); margin-inline: auto; overflow: visible; }
 .lineage-box::-webkit-scrollbar { width: 8px; height: 8px; }
 .lineage-box::-webkit-scrollbar-track, .lineage-box::-webkit-scrollbar-corner { background: transparent; }
 .lineage-box::-webkit-scrollbar-thumb { background: #b8c8c1; background-clip: padding-box; border: 2px solid transparent; border-radius: 999px; }
