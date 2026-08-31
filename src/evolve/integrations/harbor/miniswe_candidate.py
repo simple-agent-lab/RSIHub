@@ -69,6 +69,23 @@ def _reasoning_effort():
     return effort
 
 
+def _max_output_tokens():
+    raw = os.environ.get("MINISWE_MAX_OUTPUT_LIMIT", "").strip()
+    if not raw:
+        return None
+    try:
+        value = int(raw)
+    except ValueError as error:
+        raise ValueError(
+            f"Invalid MINISWE_MAX_OUTPUT_LIMIT={raw!r}; expected a positive integer"
+        ) from error
+    if value <= 0:
+        raise ValueError(
+            f"Invalid MINISWE_MAX_OUTPUT_LIMIT={raw!r}; expected a positive integer"
+        )
+    return value
+
+
 def build_model(config):
     model_name = os.environ["MSWEA_MODEL_NAME"]
     effort = _reasoning_effort()
@@ -78,7 +95,11 @@ def build_model(config):
 
     if model_name.startswith("openai/"):
         nested_kwargs = dict(model_kwargs.get("model_kwargs") or {})
-        nested_kwargs.setdefault("max_output_tokens", 64_000)
+        output_limit = _max_output_tokens()
+        if output_limit is None:
+            nested_kwargs.setdefault("max_output_tokens", 64_000)
+        else:
+            nested_kwargs["max_output_tokens"] = output_limit
         nested_kwargs.pop("reasoning_effort", None)
         if effort is not None:
             nested_kwargs["reasoning"] = {"effort": effort}
@@ -519,6 +540,7 @@ class CandidateMiniSweAgent(MiniSweAgent):
         for name in (
             "MINISWE_STEP_LIMIT",
             "MINISWE_COST_LIMIT",
+            "MINISWE_MAX_OUTPUT_LIMIT",
             "MINISWE_ENV_TIMEOUT",
             "MINISWE_REASONING_EFFORT",
         ):
