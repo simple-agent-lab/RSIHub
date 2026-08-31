@@ -72,11 +72,11 @@ export function lineageChart(generations, selected) {
     if (!columns.has(depth)) columns.set(depth, []);
     columns.get(depth).push(item);
   });
-  const cardWidth = 148;
-  const cardHeight = 58;
-  const columnGap = 78;
-  const rowGap = 14;
-  const padding = 18;
+  const cardWidth = 120;
+  const cardHeight = 46;
+  const columnGap = 58;
+  const rowGap = 10;
+  const padding = 14;
   const columnCount = Math.max(...columns.keys()) + 1;
   const rowCount = Math.max(...[...columns.values()].map((items) => items.length));
   const width = padding * 2 + columnCount * cardWidth + Math.max(0, columnCount - 1) * columnGap;
@@ -106,7 +106,7 @@ export function lineageChart(generations, selected) {
     const score = item.score == null ? 'no score' : `${(Number(item.score) * 100).toFixed(0)}%`;
     const point = positions.get(String(item.genid));
     const state = item.parent == null ? 'Seed' : terminal ? 'Rejected candidate' : item.score == null ? 'Awaiting evaluation' : 'Valid candidate';
-    return `<g class="lineage-node ${terminal ? 'rejected' : ''} ${active ? 'champion' : ''}" transform="translate(${point.x} ${point.y})"><title>Generation ${escapeSvg(item.genid)} · ${score} · ${escapeSvg(item.status)}</title><rect width="${cardWidth}" height="${cardHeight}" rx="9"></rect><text class="lineage-node-title" x="12" y="18">gen-${escapeSvg(item.genid)}${active ? ' ★' : ''}</text><text class="lineage-node-score" x="12" y="36">${score} <tspan>score</tspan></text><text class="lineage-node-state" x="12" y="51">${state}</text></g>`;
+    return `<g class="lineage-node ${terminal ? 'rejected' : ''} ${active ? 'champion' : ''}" transform="translate(${point.x} ${point.y})"><title>Generation ${escapeSvg(item.genid)} · ${score} · ${escapeSvg(item.status)}</title><rect width="${cardWidth}" height="${cardHeight}" rx="7"></rect><text class="lineage-node-title" x="10" y="15">gen-${escapeSvg(item.genid)}${active ? ' ★' : ''}</text><text class="lineage-node-score" x="10" y="29">${score} <tspan>score</tspan></text><text class="lineage-node-state" x="10" y="41">${state}</text></g>`;
   }).join('');
   return `<svg class="lineage-chart" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMinYMin meet" style="--lineage-width:${width}px;--lineage-height:${height}px" role="img" aria-label="Generation lineage with selection scores">${edges}${nodes}</svg>`;
 }

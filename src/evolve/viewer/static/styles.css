@@ -138,10 +138,10 @@ main.diff-mode { width: min(var(--diff-content-max), 100%); }
 .lineage-node.rejected rect { stroke: #c75a4a; stroke-dasharray: 5 3; }
 .lineage-node.champion rect { stroke: #087763; stroke-width: 2.8; }
 .lineage-node text { pointer-events: none; }
-.lineage-node-title { fill: #20332d; font: 700 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
-.lineage-node-score { fill: #137663; font: 700 10px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.lineage-node-title { fill: #20332d; font: 700 9.5px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.lineage-node-score { fill: #137663; font: 700 8px ui-monospace, SFMono-Regular, Menlo, monospace; }
 .lineage-node-score tspan { font-weight: 600; }
-.lineage-node-state { fill: #7b8e87; font: 9px Inter, ui-sans-serif, sans-serif; }
+.lineage-node-state { fill: #7b8e87; font: 7.5px Inter, ui-sans-serif, sans-serif; }
 .lineage-node.rejected .lineage-node-score { fill: #a9483b; }
 .lineage-legend { display: flex; flex-wrap: wrap; gap: 18px; padding: 11px 2px 0; color: var(--muted); font-size: 10px; }
 .lineage-legend span { display: inline-flex; align-items: center; gap: 6px; }
