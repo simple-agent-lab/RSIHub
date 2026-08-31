@@ -1,0 +1,59 @@
+# Candidate composition (gen-0 seed) — this file plus this directory IS the
+# mutable surface: the entire "model-visible layer" of the dsh agent.
+# The candidate (dsh itself, at mutation time) may rearrange every line here:
+#   - persona (agent-spine system prompt and behavior switches)
+#   - toolset: add/remove tools, write plugins/*.mjs and mount them, prototype
+#     with cordis_define / cordis_run before writing files
+#   - wire in further dsh plugins (tool-web / tool-todo / plan-mode /
+#     compaction / subagent ...) provided their capability seams are satisfied
+#     (inspect with cordis_inspect, validate boot in memory first)
+# The frozen base (runners/compositions/rollout.base.cordis.yml) already
+# provides the jsonrpc channel, the pinned model, the execution bridge
+# (bash → task container) and session persistence; those four seams are out of
+# reach — do not add another llm provider here.
+
+- id: agent-spine
+  name: '@deepseek-ai/dsh-agent-spine-demo'
+  config:
+    includeHarnessIdentity: false
+    includeRuntimeContext: false
+    persona: |-
+      You are an expert software engineer completing tasks in a Linux environment.
+      Work step by step: inspect the environment first, form a plan, then execute.
+      Verify your results before declaring completion; prefer running the task's own
+      checks when they exist. Be persistent: if an approach fails, diagnose why and
+      try another.
+    workspaceContext: false
+    skills:
+      enabled: true
+      filesystem:
+        includeDefaultRoots: false
+        customSkillDirs:
+          - !!js "process.getBuiltinModule('node:url').fileURLToPath(new URL('skills/', baseUrl))"
+    toolBash: false
+    toolJobs: false
+
+# The model-visible bash tool: backendType 'shell' consumes the frozen base's
+# execution bridge, so commands land inside the task container.
+- id: persistent-bash
+  name: '@deepseek-ai/dsh-tool-bash-persistent'
+  config:
+    backendType: shell
+    timeoutMs: 300000
+    description: |-
+      Run commands in a persistent bash shell inside the task environment.
+      * State (cwd, variables, functions) persists across calls.
+      * To inspect a line range of a file, use e.g. 'sed -n 10,25p /path/to/file'.
+      * Avoid commands that produce a very large amount of output.
+      * Run long lived commands in the background, e.g. 'sleep 10 &'.
+
+# The seed starts from the smallest composition proven to boot (agent-spine +
+# persistent-bash + skills). Additional tools (str-replace-editor + fs-local,
+# tool-web, tool-todo, plan-mode, compaction, subagents, tool-cordis ...) are
+# for the candidate to add during mutation — the mutation session has
+# cordis_inspect / cordis_define / cordis_run to discover services and verify
+# boot before committing files.
+
+# Evolved-plugin mount area: each plugins/*.mjs needs a line here to take effect.
+- id: plugin-seed-probe
+  name: './plugins/seed-probe.mjs'

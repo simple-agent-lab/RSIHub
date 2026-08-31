@@ -13,6 +13,7 @@ SUPPORTED = {
     "hill_climb_codex",
     "hyperagents",
     "hyperagents_codex",
+    "hyperagents_dsh",
 }
 
 

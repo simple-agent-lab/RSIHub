@@ -1,0 +1,100 @@
+# Mutation-session composition — FROZEN.
+# dsh runs locally on the host; cwd = the candidate profile inside the child
+# worktree. The task: read the failure evidence and improve its own profile
+# (persona / plugins / skills) — "dsh writes plugins for itself".
+#
+# Environment:
+#   DSH_MODEL             meta model (default deepseek-v4-pro)
+#   DSH_MUTATE_SKILLS_DIR official composition-authoring skills directory
+#                         (inside the dsh repo, read-only reference)
+#   DSH_CWD / DSH_SESSION_ROOT injected by the SDK
+
+- id: sdk-jsonrpc-server
+  name: '@deepseek-ai/dsh-sdk-jsonrpc-server'
+  config:
+    maxTokensAsSuccess: false
+
+- id: llm-deepseek
+  name: '@deepseek-ai/dsh-llm-deepseek'
+  config:
+    apiKeyEnv: DEEPSEEK_API_KEY
+    streamIdleTimeoutMs: 600000
+    models:
+      - id: !!js process.env.DSH_MODEL ?? 'deepseek-v4-pro'
+        contextWindow: !!js Number(process.env.DSH_CONTEXT_WINDOW ?? 1000000)
+
+- id: sandbox
+  name: '@deepseek-ai/dsh-sandbox-local'
+
+- id: sandbox-policy
+  name: '@deepseek-ai/dsh-sandbox-policy'
+  config:
+    mode: danger-full-access
+    workspaceRoot: !!js process.env.DSH_CWD ?? process.cwd()
+
+- id: subprocess
+  name: '@deepseek-ai/dsh-subprocess-local'
+
+- id: pty
+  name: '@deepseek-ai/dsh-terminal'
+
+- id: terminal-bash
+  name: '@deepseek-ai/dsh-terminal-bash'
+  config:
+    timeoutMs: 300000
+
+- id: fs-local
+  name: '@deepseek-ai/dsh-fs-local'
+  config:
+    cwd: !!js process.env.DSH_CWD ?? process.cwd()
+
+- id: agent-spine
+  name: '@deepseek-ai/dsh-agent-spine-demo'
+  config:
+    includeHarnessIdentity: false
+    includeRuntimeContext: false
+    persona: |-
+      You are the self-improvement engineer of an agent harness. The current working
+      directory is your own agent profile: profile.cordis.yml composes you, plugins/
+      holds your plugin source files, skills/ holds your skill packages. You will be
+      given evaluation evidence (failed task trajectories) and your job is to improve
+      this profile so the agent solves more tasks. You may edit the persona, write or
+      revise plugins, and add or refine skills. Prototype risky plugin ideas with the
+      cordis_define / cordis_run tools before writing files. Keep changes focused and
+      justified by the evidence; record your reasoning in EVOLUTION_LOG.md.
+    workspaceContext: false
+    skills:
+      enabled: true
+      filesystem:
+        includeDefaultRoots: false
+        customSkillDirs:
+          - !!js "process.getBuiltinModule('node:url').fileURLToPath(new URL('skills/', baseUrl))"
+          - !!js process.env.DSH_MUTATE_SKILLS_DIR ?? ''
+    toolBash: false
+    toolJobs: false
+
+- id: persistent-bash
+  name: '@deepseek-ai/dsh-tool-bash-persistent'
+  config:
+    timeoutMs: 300000
+
+- id: str-replace-editor
+  name: '@deepseek-ai/dsh-tool-str-replace-editor'
+  config:
+    maxOutputChars: 16000
+
+# Live testbed: lets the mutation session define and trial-run plugin drafts
+# in memory before deciding to write them to disk.
+- id: cordis-host-runner
+  name: '@deepseek-ai/dsh-cordis-host-runner'
+  config:
+    vmTimeoutMs: 5000
+
+- id: tool-cordis
+  name: '@deepseek-ai/dsh-tool-cordis'
+
+- id: sessions
+  name: '@deepseek-ai/dsh-session-persistence-jsonl'
+  config:
+    root: !!js process.env.DSH_SESSION_ROOT ?? './.sessions'
+    compression: none

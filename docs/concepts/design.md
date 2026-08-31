@@ -47,7 +47,8 @@ recipe YAML
 ```
 
 The framework ships `aevolve`, `ahe`, `ahe_codex`, `gepa`, `gepa_local`,
-`hill_climb`, `hill_climb_codex`, `hyperagents`, and `hyperagents_codex`.
+`hill_climb`, `hill_climb_codex`, `hyperagents`, `hyperagents_codex`, and
+`hyperagents_dsh`.
 Development smoke recipes live under `tests/fixtures/recipes/` and are not part
 of the public recipe inventory.
 

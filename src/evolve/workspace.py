@@ -426,7 +426,7 @@ def _validate_target_config(target: dict[str, Any]) -> None:
     if not isinstance(generate_lock, bool):
         raise ValueError("target.generate_lock must be a boolean")
 
-    if seed in ("builtin-codex", "builtin-local-smoke") or _looks_like_git_url(seed):
+    if seed in ("builtin-codex", "builtin-dsh", "builtin-local-smoke") or _looks_like_git_url(seed):
         return
     if revision is not None:
         raise ValueError("target.revision requires a git URL seed")
@@ -473,7 +473,7 @@ def _write_target(workspace: Path, target_config: dict[str, Any]) -> None:
     revision_value = target_config.get("revision")
     revision = cast(str | None, revision_value)
     generate_lock = target_config.get("generate_lock", False)
-    if seed_text in ("builtin-codex", "builtin-local-smoke"):
+    if seed_text in ("builtin-codex", "builtin-dsh", "builtin-local-smoke"):
         _copy_resource_tree(seed_root() / seed_text.removeprefix("builtin-"), workspace / "target")
         (workspace / "target" / "UPSTREAM.json").write_text(
             json.dumps({"kind": "builtin", "seed": seed_text}, sort_keys=True) + "\n"

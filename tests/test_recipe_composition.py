@@ -148,6 +148,41 @@ def test_supported_recipe_initializes_only_selected_components(
         assert probe.returncode == 0, probe.stderr
 
 
+def test_hyperagents_dsh_recipe_initializes_builtin_seed_and_local_mutate(tmp_path: Path) -> None:
+    workspace = tmp_path / "hyperagents_dsh"
+    init_workspace(
+        InitOptions(
+            workspace=workspace,
+            recipe="hyperagents_dsh",
+            dataset=str(_local_dataset(tmp_path / "tasks")),
+        )
+    )
+
+    rendered = load_config(workspace / "evolve.yaml")
+    assert rendered["target"] == {"seed": "builtin-dsh"}
+    assert rendered["evaluator"]["agent"] == "target.agent:DshAgent"
+    mutate = rendered["operators"]["mutate"]["config"]
+    assert mutate["runner"] == "local"
+    assert mutate["command"] == "python3 target/runners/mutate_local.py"
+    assert "agent" not in mutate
+    for relative in (
+        "agent.py",
+        "dsh_trajectory.py",
+        "profile.cordis.yml",
+        "runners/mutate_local.py",
+        "runners/compositions/rollout.base.cordis.yml",
+        "runners/compositions/mutate.cordis.yml",
+    ):
+        assert (workspace / "target" / relative).is_file()
+    components = json.loads((workspace / ".evolve-components.json").read_text())
+    assert components["recipe"] == "hyperagents_dsh"
+    assert components["target_seed"] == "builtin-dsh"
+    assert components["evaluator_engine"] == "harbor"
+    assert components["integrations"] == []
+    assert not (workspace / "target" / "codex.toml").exists()
+    assert (workspace / "evaluator" / "cleanup_harbor.py").is_file()
+
+
 def test_recipe_path_rejects_recipe_local_operators_before_workspace_writes(tmp_path: Path) -> None:
     recipe = tmp_path / "custom-path-recipe"
     shutil.copytree(Path(recipe_root()) / "hill_climb", recipe)

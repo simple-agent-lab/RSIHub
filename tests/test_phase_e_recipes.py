@@ -15,8 +15,10 @@ SUPPORTED_RECIPES = {
     "hill_climb_codex",
     "hyperagents",
     "hyperagents_codex",
+    "hyperagents_dsh",
 }
 UV_SOURCE_RECIPES = {"ahe", "hill_climb", "hyperagents"}
+LOCAL_MUTATE_RECIPES = {"hyperagents_dsh"}
 MAIN_RECIPES = SUPPORTED_RECIPES - {"gepa_local"}
 TERMINAL_BENCH_DATASET = "terminal-bench-2-30-v1"
 CODEX_IMAGE = "evolve-mutate-codex:20260818-codex0146"
@@ -39,8 +41,13 @@ def test_main_recipes_share_terminal_bench_and_explicit_mutate_images() -> None:
     for name in MAIN_RECIPES:
         config = _parsed_config(name)
         assert config["evaluator"]["dataset"] == TERMINAL_BENCH_DATASET
+        mutate = _operator_config(name, "mutate")
+        if name in LOCAL_MUTATE_RECIPES:
+            assert mutate["runner"] == "local"
+            assert "image" not in mutate
+            continue
         expected_image = MINISWE_IMAGE if name in {"ahe", "hyperagents"} else CODEX_IMAGE
-        assert _operator_config(name, "mutate")["image"] == expected_image
+        assert mutate["image"] == expected_image
 
 
 def test_all_recipes_are_recipe_artifacts_only() -> None:
@@ -149,6 +156,15 @@ def test_supported_recipes_use_harbor_and_method_mutate() -> None:
             "gate": "parent_eligible",
             "record": "hyperagents",
         },
+        "hyperagents_dsh": {
+            "select": "score_child_prop",
+            "rollout": "parent_evaluation",
+            "analyze": "trace_browser",
+            "mutate": "hyperagents",
+            "validate": "node_check",
+            "gate": "parent_eligible",
+            "record": "hyperagents",
+        },
     }
     for name in SUPPORTED_RECIPES:
         resolved = resolve_builtin_recipe(name)
@@ -178,6 +194,11 @@ def test_supported_recipes_use_harbor_and_method_mutate() -> None:
         elif name in {"ahe", "hyperagents"}:
             assert config["target"]["revision"] == "388da74aad620a384ab47669b17c52133e30e7c3"
             assert mutate["agent"] == "evolve.integrations.harbor.miniswe_task_file:InstalledMiniSweAgent"
+        elif name == "hyperagents_dsh":
+            assert config["target"]["seed"] == "builtin-dsh"
+            assert mutate["runner"] == "local"
+            assert mutate["command"] == "python3 target/runners/mutate_local.py"
+            assert "agent" not in mutate
         else:
             assert mutate["agent"] == "codex"
 
@@ -199,6 +220,7 @@ def test_terminal_bench_method_recipes_use_full_curated_dataset() -> None:
         "ahe": TERMINAL_BENCH_DATASET,
         "hyperagents": TERMINAL_BENCH_DATASET,
         "hyperagents_codex": TERMINAL_BENCH_DATASET,
+        "hyperagents_dsh": TERMINAL_BENCH_DATASET,
     }
     for name, expected_dataset in expected_datasets.items():
         recipe = _parsed_config(name)
@@ -360,7 +382,7 @@ def test_hyperagents_recipe_configures_reasoning_without_cost_caps() -> None:
 
 
 def test_recipe_retry_and_partial_floor_defaults_remain_method_specific() -> None:
-    for name in ("ahe", "hill_climb", "hill_climb_codex", "hyperagents", "hyperagents_codex"):
+    for name in ("ahe", "hill_climb", "hill_climb_codex", "hyperagents", "hyperagents_codex", "hyperagents_dsh"):
         evaluator = _parsed_config(name)["evaluator"]
         assert evaluator["max_retries"] == 1
         assert evaluator["partial_floor"] == 0.8

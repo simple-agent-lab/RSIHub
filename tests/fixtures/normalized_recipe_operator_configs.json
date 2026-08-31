@@ -403,5 +403,31 @@
       "seed": 0
     },
     "validate": {}
+  },
+  "hyperagents_dsh": {
+    "analyze": {
+      "history_cycles": 2,
+      "max_chars": 30000,
+      "max_observations": 30
+    },
+    "gate": {},
+    "mutate": {
+      "command": "python3 target/runners/mutate_local.py",
+      "editable_roots": [
+        "target"
+      ],
+      "expose_gate_data": false,
+      "max_retries": 1,
+      "runner": "local"
+    },
+    "record": {},
+    "rollout": {
+      "field_limit": 2000,
+      "pass_threshold": 1.0
+    },
+    "select": {
+      "seed": 0
+    },
+    "validate": {}
   }
 }

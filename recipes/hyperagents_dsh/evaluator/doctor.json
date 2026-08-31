@@ -1,0 +1,11 @@
+{
+  "backend": "docker",
+  "runtime": {
+    "prepare": "evaluator/prepare-runtime.sh",
+    "required_environment": {
+      "DSH_NODE_BIN": "executable"
+    },
+    "timeout_s": 120
+  },
+  "schema_version": 1
+}

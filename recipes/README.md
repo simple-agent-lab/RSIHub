@@ -14,6 +14,7 @@ represents.
 - [Hill Climb for Codex](hill_climb_codex/README.md)
 - [HyperAgents](hyperagents/README.md)
 - [HyperAgents for Codex](hyperagents_codex/README.md)
+- [HyperAgents for DeepSeek Harness](hyperagents_dsh/README.md)
 
 All main recipes use the shared, content-pinned Terminal-Bench 2.0 subset. The
 setup script downloads and verifies it and builds only the selected recipe's

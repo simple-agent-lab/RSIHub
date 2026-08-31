@@ -1,0 +1,92 @@
+# Frozen rollout base — candidates can never touch this file.
+# The mutable surface is maximal: the candidate owns the entire "model-visible
+# layer" (see seed/profile.cordis.yml). The frozen base provides exactly four
+# seams that stay out of reach:
+#   1. jsonrpc-server — the evaluation channel (how Harbor talks to dsh)
+#   2. llm — the pinned model (fair comparison; candidates may not swap models)
+#   3. execution sandbox = terminal-bash via `docker exec` into the isolated
+#      task container (keeps scoring meaningful)
+#   4. sessions — session persistence (the trajectory evidence source)
+# Everything else (persona / toolset / planning / compaction / subagents /
+# skills / custom plugins / agent behavior) is composed by the candidate,
+# loaded through the include at the end.
+#
+# Runtime variables (injected by the Harbor adapter through the SDK env):
+#   DSH_CONTAINER / DSH_CONTAINER_CWD / DSH_DOCKER_BIN / DSH_MODEL
+#   DSH_CANDIDATE_DIR (candidate dir; __CANDIDATE_PROFILE__ is replaced by the
+#   driver with its absolute profile path)
+
+- id: sdk-jsonrpc-server
+  name: '@deepseek-ai/dsh-sdk-jsonrpc-server'
+  config:
+    maxTokensAsSuccess: false
+
+# Pinned model: candidate compositions must not add another llm provider
+# (guard-level rejection), so every generation runs on the same "brain".
+- id: llm-deepseek
+  name: '@deepseek-ai/dsh-llm-deepseek'
+  config:
+    apiKeyEnv: DEEPSEEK_API_KEY
+    streamIdleTimeoutMs: 600000
+    models:
+      - id: !!js process.env.DSH_MODEL ?? 'deepseek-v4-flash'
+        contextWindow: !!js Number(process.env.DSH_CONTEXT_WINDOW ?? 1000000)
+
+- id: sandbox
+  name: '@deepseek-ai/dsh-sandbox-local'
+
+- id: sandbox-policy
+  name: '@deepseek-ai/dsh-sandbox-policy'
+  config:
+    mode: danger-full-access
+    workspaceRoot: !!js process.env.DSH_CWD ?? process.cwd()
+
+- id: subprocess
+  name: '@deepseek-ai/dsh-subprocess-local'
+
+- id: pty
+  name: '@deepseek-ai/dsh-terminal'
+
+# Execution bridge (backend 'shell'): the candidate's bash tool consumes it,
+# so commands run inside the task container via `docker exec`.
+- id: terminal-bash
+  name: '@deepseek-ai/dsh-terminal-bash'
+  config:
+    backendType: shell
+    shellPath: !!js process.env.DSH_DOCKER_BIN ?? '/usr/bin/docker'
+    shellArgs:
+      - exec
+      - -i
+      - -t
+      - -e
+      - PS1
+      - -e
+      - PROMPT_COMMAND
+      - -e
+      - TERM
+      - -e
+      - PAGER
+      - -e
+      - GIT_PAGER
+      - -w
+      - !!js process.env.DSH_CONTAINER_CWD ?? '/app'
+      - !!js process.env.DSH_CONTAINER
+      - /bin/bash
+      - --noprofile
+      - --norc
+      - -i
+    idleSilenceMs: 500
+    handoffGraceMs: 250
+    timeoutMs: 300000
+
+- id: sessions
+  name: '@deepseek-ai/dsh-session-persistence-jsonl'
+  config:
+    root: !!js process.env.DSH_SESSION_ROOT ?? './.sessions'
+    compression: none
+
+# ---- Evolvable layer: the candidate's entire model-visible composition ----
+- id: candidate-composition
+  name: '@deepseek-ai/cordis-plugin-include'
+  config:
+    path: __CANDIDATE_PROFILE__
