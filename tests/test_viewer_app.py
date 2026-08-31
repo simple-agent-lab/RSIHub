@@ -204,7 +204,7 @@ def test_frontend_has_required_navigation_and_refresh_contract() -> None:
     assert all(label in html for label in ("Overview", "Generations", "Trials"))
     assert "<title>RSIHub experiment viewer</title>" in html
     assert "<strong>RSIHub</strong>" in html
-    assert 'src="/evolve-assets/rsihub-mark.svg"' in html
+    assert 'src="__EVOLVE_ROOT__/evolve-assets/rsihub-mark.svg"' in html
     assert "Evol" + "veX" not in html
     assert (static / "rsihub-mark.svg").read_bytes() == (repository / "docs/rsihub-mark.svg").read_bytes()
     assert "3000" in javascript

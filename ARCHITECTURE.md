@@ -40,7 +40,7 @@ decision (and usually a demolition pass) instead of silent sprawl.
 | `evaluation/contract.py` | 500 | resolve, hash, persist, and project the single authoritative evaluation contract identity |
 | `evaluation/diagnostics.py` | 375 | materialize missing trials and own bounded diagnostic projection and validation |
 | `evaluation/evidence.py` | 175 | evaluator-output reading, validation, and conversion into canonical trial results |
-| `evaluation/execution.py` | 475 | clean-checkout canonical evaluation: preflight gate, run plan, tree assertion, lifecycle, artifacts, and score parsing |
+| `evaluation/execution.py` | 480 | clean-checkout canonical evaluation: preflight gate, run plan, tree assertion, lifecycle, artifacts, and score parsing |
 | `evaluation/legacy.py` | 275 | read-only task-set identity compatibility for pre-contract workspaces |
 | `evaluation/results.py` | 250 | evaluation result types, outcome classification, and persisted record shape |
 | `evaluation/run_plan.py` | 100 | authoritative per-attempt task, trial-count, commit, and runtime plan |
@@ -51,7 +51,7 @@ decision (and usually a demolition pass) instead of silent sprawl.
 | `execution_runtime/models.py` | 125 | host execution configuration, resolved context, and redacted receipt types |
 | `execution_runtime/probes.py` | 275 | daemon, Compose, disk, and bind-mount preflight probes |
 | `execution_runtime/resolve.py` | 175 | explicit/env/Linux/macOS Docker endpoint resolution |
-| `experiment_smoke.py` | 200 | isolated one-task gen0-to-gen1 full-loop canary |
+| `experiment_smoke.py` | 210 | isolated one-task gen0-to-gen1 full-loop canary |
 | `feedback.py` | 250 | assemble current and historical rollout evidence plus ledger-derived feedback for mutation |
 | `operators.py` | 200 | subprocess runner for workspace operator scripts (contract: env vars, --config, timeout) |
 | `operator_cli.py` | 325 | agent-facing library authoring/discovery, active inspection, and one-stage invocation commands |
@@ -92,7 +92,7 @@ decision (and usually a demolition pass) instead of silent sprawl.
 | `viewer/models.py` | 300 | stable viewer API models and internal source/snapshot records |
 | `viewer/reader.py` | 450 | validated cached reads of archive, stage, evaluation, and Harbor-root evidence |
 | `viewer/snapshot.py` | 700 | derive health, stages, changes, performance, trials, and artifact references from source evidence |
-| `viewer/harbor_bridge.py` | 350 | ephemeral federation and current/retained-schema trial links for Harbor inspection |
+| `viewer/harbor_bridge.py` | 365 | ephemeral federation and current/retained-schema trial links for Harbor inspection |
 | `viewer/app.py` | 450 | read-only RSIHub API, Harbor composition, snapshot retention, and server launch |
 
 ### The frozen ring (`src/evolve/frozen/`)
@@ -109,7 +109,7 @@ each workspace, immutable there because it sits outside the mutable surface
 | `frozen/interfaces.py` | 350 | operator ABCs, registry, result schemas, and strict operator payload validation |
 | `frozen/sdk.py` | 350 | Python operator entrypoint and file-contract IO; no library algorithm policy |
 
-Total `src/evolve/` budget: **19285 lines**. The budget admits the read-only experiment viewer,
+Total `src/evolve/` budget: **20815 lines**. The budget admits the read-only experiment viewer,
 the explicit content-backed
 evaluation-contract boundaries, the opt-in in-place Harbor runtime, and the redacted trace-analysis
 boundary between rollout and feedback assembly; if the mechanism wants to
