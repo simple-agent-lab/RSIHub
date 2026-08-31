@@ -15,7 +15,7 @@ operators:
   select: {operator: ahe_latest, timeout_s: 600, config: {}}
   rollout: {operator: parent_evaluation, timeout_s: 600, config: {field_limit: 2000}}
   analyze: {operator: ahe, timeout_s: 3600, config: {max_tasks: 30, max_concurrent: 5, timeout_per_task: 600, debugger_max_retries: 2, debugger_agent_kwargs: {reasoning_effort: high}, field_limit: 2000}}
-  mutate: {operator: ahe, timeout_s: 3600, config: {runner: harbor, expose_gate_data: false, agent: codex, model: gpt-5.4, environment: docker, image: evolve-mutate-codex:20260818-codex0146, editable_roots: [target], prompt_path: target/prompt.md, skills_dir: target/skills, agent_kwargs: {reasoning_effort: high}, max_retries: 1}}
+  mutate: {operator: ahe, timeout_s: 3600, config: {runner: harbor, expose_gate_data: false, agent: codex, model: gpt-5.4, environment: docker, image: evolve-mutate-codex:20260818-codex0146, editable_roots: [target], prompt_path: target/prompt.md, skills_dir: target/skills, agent_kwargs: {reasoning_effort: xhigh}, max_retries: 1}}
   gate: {operator: ahe_artifact_valid, timeout_s: 600, config: {}}
   record: {operator: jsonl, timeout_s: 600, config: {}}
   timeout_s: 600

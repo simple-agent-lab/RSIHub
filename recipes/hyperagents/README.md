@@ -16,10 +16,10 @@ workspace initialization generates and freezes it explicitly.
 `select.operator: score_child_prop` balances score with child-proposal behavior.
 `rollout.operator: parent_evaluation` exposes the selected parent's sanitized, certified gate evaluation without launching another task run.
 `analyze.operator: trace_browser` exposes current traces, metrics, and history through the normalized feedback bundle.
-`mutate.operator: hyperagents` consumes that bundle through Harbor's installed MiniSWE agent while retaining self-referential editing.
-The mutation agent uses `high` reasoning with an explicit 64k output budget.
-The explicit `max_tokens` value is required because mini-swe-agent otherwise
-uses its 1,000-token default.
+`mutate.operator: hyperagents` consumes that bundle through a Harbor-hosted
+Codex CLI 0.146.0 agent while retaining self-referential editing. The mutation
+agent uses `xhigh` reasoning, matching the benchmark configuration used for
+the reported HyperAgents runs.
 `gate.operator: parent_eligible` admits evaluated process candidates.
 `evaluator.engine: harbor` runs the canonical black-box benchmark.
 `task_scope: full` freezes all 30 curated task identities as one shared
@@ -40,9 +40,9 @@ Candidate execution uses Harbor's native task timeouts
 Build the workspace image once before running:
 
 ```bash
-IMAGE_CONTEXT="$(python -c 'from evolve.config import resource_root; print(resource_root("containers") / "mutate")')"
-docker build --build-arg MINISWE_VERSION=2.4.5 \
-  -t evolve-mutate-app:20260724-tools-mswe245 "$IMAGE_CONTEXT"
+IMAGE_CONTEXT="$(python -c 'from evolve.config import resource_root; print(resource_root("containers") / "mutate-codex")')"
+docker build --build-arg CODEX_VERSION=0.146.0 \
+  -t evolve-mutate-codex:20260818-codex0146 "$IMAGE_CONTEXT"
 ```
 
 ## Operator Routing

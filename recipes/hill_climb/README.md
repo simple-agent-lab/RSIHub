@@ -13,6 +13,7 @@ population memory, but the population has only one active frontier.
 `rollout.operator: harbor` runs the current parent on the frozen train split.
 `analyze.operator: failure_patterns` distills verifier-grounded failures and passing behavior for `mutate`.
 `mutate.operator: hyperagents` applies the selected evidence; `config.runner: harbor` runs its editing agent in an isolated Harbor task.
+The editing agent is Codex CLI 0.146.0 with `xhigh` reasoning.
 `gate.operator: hillclimb` compares child and parent on the same task hash.
 `evaluator.engine: harbor` runs the canonical black-box benchmark.
 `sampling: static` keeps every recipe on the same frozen validation set.
