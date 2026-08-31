@@ -120,7 +120,7 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 .lineage-node-title { fill: #20332d; font: 700 9.5px var(--mono); }
 .lineage-node-score { fill: #137663; font: 700 8px var(--mono); }
 .lineage-node-score tspan { font-weight: 600; }
-.lineage-node-state { fill: #7b8e87; font: 7.5px var(--sans); }
+.lineage-node-state { fill: #7b8e87; font: 7.5px Inter, ui-sans-serif, sans-serif; }
 .lineage-node.rejected .lineage-node-score { fill: #a9483b; }
 .card-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 10px; }
 .open-label { color: #24664c; font-weight: 700; }
