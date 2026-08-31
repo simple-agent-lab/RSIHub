@@ -66,7 +66,9 @@ def evaluate(
     evaluator_fingerprint = evaluator_tree(workspace, tag)
     if evaluator_fingerprint != evaluator_tree(workspace, "gen/0"):
         raise RuntimeError(f"evaluator tree for {tag} differs from gen/0")
-    with tempfile.TemporaryDirectory(prefix="evolve-eval-") as tempdir:
+    evaluation_worktrees = workspace / "runs" / "evaluation-worktrees"
+    evaluation_worktrees.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="evolve-eval-", dir=evaluation_worktrees) as tempdir:
         checkout = Path(tempdir) / "checkout"
         git(workspace, "worktree", "add", "--detach", str(checkout), candidate_commit)
         cleanup_needed = True
@@ -374,7 +376,10 @@ def _runtime_selection_matches(
         return True
     selection = run_dir / "task-split.json"
     plan = run_dir / "run-plan.json"
-    source = selection if selection.is_file() else plan
+    # The run plan is the authoritative, already-limited task set.  A frozen
+    # split receipt can legitimately contain the whole split when a smoke or
+    # capability run applies ``task_limit`` afterwards.
+    source = plan if plan.is_file() else selection
     if not source.is_file():
         return False
     try:
@@ -384,7 +389,28 @@ def _runtime_selection_matches(
     tasks = payload.get("tasks") if isinstance(payload, dict) else None
     if not isinstance(tasks, list) or any(not isinstance(task, str) or not task for task in tasks):
         return False
-    return tuple(sorted(set(tasks))) == tuple(sorted(set(planned_members)))
+    expected = set(planned_members)
+    normalized = tuple(_normalize_runtime_task_id(task, expected) for task in tasks)
+    return tuple(sorted(set(normalized))) == tuple(sorted(expected))
+
+
+def _normalize_runtime_task_id(task_id: str, expected_task_ids: set[str]) -> str:
+    """Map Harbor-qualified task names back to their frozen dataset identity.
+
+    Harbor reports ``task.name`` from task.toml, while RSIHub freezes local
+    dataset-directory names.  Official datasets commonly qualify the former as
+    ``namespace/dataset__directory-name``.  Accept that representation only
+    when its suffix resolves to exactly one frozen member; ambiguous or
+    unrelated names remain mismatches.
+    """
+    if task_id in expected_task_ids:
+        return task_id
+    matches = [
+        expected
+        for expected in expected_task_ids
+        if task_id.endswith(f"__{expected}") or task_id.endswith(f"/{expected}")
+    ]
+    return matches[0] if len(matches) == 1 else task_id
 
 
 def _expected_trials(evaluator: dict[str, Any], task_limit: int | None, *, selected_tasks: int | None = None) -> int:
@@ -417,6 +443,11 @@ def _run_eval_script(
     env: dict[str, str] = {
         **(process_environment or source_environment),
         **environment_plan.process_env(),
+        # Harbor may change its process cwd while constructing trials.  Pin the
+        # trusted detached checkout so candidate-local import paths such as
+        # ``target.agent:HarborAgent`` remain resolvable without inheriting a
+        # caller-controlled PYTHONPATH.
+        "PYTHONPATH": str(checkout.resolve()),
         "EVOLVE_RUN_DIR": str(run_dir),
         "EVOLVE_GENID": genid,
         "EVOLVE_EVAL_KIND": purpose,

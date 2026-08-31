@@ -599,9 +599,45 @@ def _task_leaf(task_name: str) -> str:
     return task_name.rsplit("/", 1)[-1]
 
 
+def _canonical_task_name(task_name: str, selected_tasks: list[str]) -> str | None:
+    """Resolve Harbor's qualified task id to one frozen-split member.
+
+    Harbor may report a local task directory as ``namespace/dataset__task``
+    even when the frozen split stores the directory name as ``task``.  Prefer
+    exact and path-leaf matches, then accept only the longest unambiguous
+    ``__``-suffix match.  Returning ``None`` preserves unknown evidence rather
+    than silently assigning it to the wrong split member.
+    """
+    if task_name in selected_tasks:
+        return task_name
+    leaf = _task_leaf(task_name)
+    if leaf in selected_tasks:
+        return leaf
+    matches = [name for name in selected_tasks if leaf.endswith(f"__{name}")]
+    if not matches:
+        return None
+    longest = max(len(name) for name in matches)
+    most_specific = [name for name in matches if len(name) == longest]
+    return most_specific[0] if len(most_specific) == 1 else None
+
+
+def _canonicalize_case_task_names(cases: list[dict[str, Any]], selected_tasks: list[str]) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    for case in cases:
+        copied = dict(case)
+        observed = copied.get("task_name")
+        if isinstance(observed, str) and observed:
+            canonical = _canonical_task_name(observed, selected_tasks)
+            if canonical is not None and canonical != observed:
+                copied["observed_task_name"] = observed
+                copied["task_name"] = canonical
+        normalized.append(copied)
+    return normalized
+
+
 def _with_missing_result_placeholders(cases: list[dict[str, Any]], selected_tasks: list[str]) -> list[dict[str, Any]]:
     """Represent absent frozen-split results so trace analysis cannot silently ignore them."""
-    completed = [dict(case) for case in cases]
+    completed = _canonicalize_case_task_names(cases, selected_tasks)
     observed_leaves = {_task_leaf(str(case.get("task_name"))) for case in completed if case.get("task_name")}
     for task_name in selected_tasks:
         if _task_leaf(task_name) in observed_leaves:

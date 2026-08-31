@@ -197,6 +197,32 @@ def test_eval_script_preserves_explicit_shared_uv_cache(tmp_path: Path, monkeypa
     assert shared_cache.is_dir()
 
 
+def test_eval_script_pins_checkout_pythonpath_instead_of_inheriting_host_value(tmp_path: Path, monkeypatch) -> None:
+    workspace = tmp_path / "workspace"
+    checkout = tmp_path / "checkout"
+    (checkout / "evaluator").mkdir(parents=True)
+    make_eval_script(
+        checkout / "evaluator" / "eval.sh",
+        '#!/bin/sh\nset -eu\nprintf "%s\\n" "$PYTHONPATH" > python-path\n',
+    )
+    run_dir = workspace / "runs" / "gen-1" / "eval"
+    run_dir.mkdir(parents=True)
+    monkeypatch.setenv("PYTHONPATH", "/hostile")
+
+    result = _run_eval_script(
+        checkout,
+        run_dir,
+        "1",
+        None,
+        "research",
+        "gate",
+        CandidateRuntimeResult(None, None),
+    )
+
+    assert result.returncode == 0
+    assert (checkout / "python-path").read_text() == f"{checkout.resolve()}\n"
+
+
 def test_eval_script_receives_candidate_runtime_json(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     checkout = tmp_path / "checkout"

@@ -40,6 +40,13 @@ if [ -n "${EVOLVE_UV_BINARY:-}" ]; then UV=$EVOLVE_UV_BINARY; else UV=$(command 
 # remain part of the benchmark environment.
 EVOLVE_UV_BINARY=$UV
 export EVOLVE_UV_BINARY
+run_shared_uv() (
+  # The host and task containers intentionally share this package-only cache
+  # across different UIDs. Keep host-created entries accessible to the task
+  # UID. Each uv child resets the restrictive umask before producing evidence.
+  umask 000
+  exec "$UV" "$@"
+)
 if [ "${EVOLVE_HARBOR_ENVIRONMENT:-docker}" = "docker" ] && [ -z "${DOCKER_HOST:-}" ]; then
   resolved_docker_host=$(
     "$EVOLVE_FRAMEWORK_PYTHON" -m evolve.execution_runtime.command docker-host 2>/dev/null || true
@@ -81,8 +88,9 @@ if python3 -c 'import json,sys; raise SystemExit(0 if json.load(open(sys.argv[1]
   dataset_snapshot="$EVOLVE_RUN_DIR/task-dataset"
   set -- select evaluator/splits.json "$EVOLVE_HARBOR_TASKS" "$split_name" "$EVOLVE_RUN_DIR"
   if [ -n "${EVOLVE_TASK_LIMIT:-}" ]; then set -- "$@" --limit "$EVOLVE_TASK_LIMIT"; fi
-  if ! "$UV" run --project "$EVOLVE_WORKSPACE" --frozen \
-    --python "$EVOLVE_FRAMEWORK_PYTHON" python "$PWD/.evolve/launch_splits.py" \
+  if ! run_shared_uv run --project "$EVOLVE_WORKSPACE" --frozen \
+    --python "$EVOLVE_FRAMEWORK_PYTHON" sh -c 'umask 077; exec "$@"' sh \
+    python "$PWD/.evolve/launch_splits.py" \
     "$@"; then
     printf 'infra_failed\n' > "$EVOLVE_RUN_DIR/status"
     exit 3
@@ -177,6 +185,17 @@ then
   exit 3
 fi
 runtime_mounts=$(cat "$EVOLVE_RUN_DIR/candidate-runtime.mounts.json")
+# Normalize inaccessible entries left by older callers before Harbor exposes
+# this cache to a different container UID. Do not chmod already-readable files:
+# they may have been created by that UID and be immutable to the host user.
+if ! mkdir -p "$EVOLVE_UV_CACHE_DIR" \
+  || ! find "$EVOLVE_UV_CACHE_DIR" -type d ! -perm -0005 -exec chmod a+rwx {} + \
+  || ! find "$EVOLVE_UV_CACHE_DIR" -type f ! -perm -0004 -exec chmod a+rw {} +; then
+  printf 'shared uv cache is not accessible to task containers: %s\n' \
+    "$EVOLVE_UV_CACHE_DIR" >&2
+  printf 'infra_failed\n' > "$EVOLVE_RUN_DIR/status"
+  exit 3
+fi
 jobs_dir="$EVOLVE_RUN_DIR/jobs"
 if ! mkdir "$jobs_dir"; then
   printf 'jobs directory already exists: %s\n' "$jobs_dir" >&2
@@ -236,8 +255,9 @@ if [ "${EVOLVE_EVAL_KIND:-research}" = "anchor" ] && [ -n "${EVOLVE_HARBOR_ANCHO
 fi
 if [ -n "${EVOLVE_TASK_LIMIT:-}" ] && [ -n "${EVOLVE_HARBOR_TASK_FILE:-}" ] \
   && [ "$EVOLVE_HARBOR_TASK_FILE" != "$EVOLVE_RUN_DIR/task-names.txt" ]; then
-  if ! "$UV" run --project "$EVOLVE_WORKSPACE" --frozen \
-    --python "$EVOLVE_FRAMEWORK_PYTHON" python "$PWD/.evolve/launch_splits.py" \
+  if ! run_shared_uv run --project "$EVOLVE_WORKSPACE" --frozen \
+    --python "$EVOLVE_FRAMEWORK_PYTHON" sh -c 'umask 077; exec "$@"' sh \
+    python "$PWD/.evolve/launch_splits.py" \
     limit-file "$EVOLVE_HARBOR_TASK_FILE" "$EVOLVE_RUN_DIR" --limit "$EVOLVE_TASK_LIMIT"; then
     printf 'infra_failed\n' > "$EVOLVE_RUN_DIR/status"
     exit 3
@@ -403,8 +423,8 @@ for proxy_entry in \
 done
 set -- "$@" --job-name "$EVOLVE_ATTEMPT_ID" --jobs-dir "$jobs_dir" --n-attempts "${EVOLVE_HARBOR_ATTEMPTS:-1}" -n "${EVOLVE_HARBOR_N_CONCURRENT:-$EVOLVE_HARBOR_N}" -y -q
 if [ -n "${EVOLVE_CANDIDATE_SMOKE_MODE:-}" ]; then
-  "$UV" run --project "$EVOLVE_WORKSPACE" --frozen \
-    --python "$EVOLVE_FRAMEWORK_PYTHON" harbor "$@"
+  run_shared_uv run --project "$EVOLVE_WORKSPACE" --frozen \
+    --python "$EVOLVE_FRAMEWORK_PYTHON" sh -c 'umask 077; exec "$@"' sh harbor "$@"
   exit $?
 fi
 if [ "${EVOLVE_LIVE_OUTPUT:-0}" = "1" ]; then
@@ -413,13 +433,15 @@ if [ "${EVOLVE_LIVE_OUTPUT:-0}" = "1" ]; then
   mkfifo "$live_fifo"
   tee "$EVOLVE_RUN_DIR/harbor.log" < "$live_fifo" &
   tee_pid=$!
-  "$UV" run --project "$EVOLVE_WORKSPACE" --frozen \
-    --python "$EVOLVE_FRAMEWORK_PYTHON" harbor "$@" > "$live_fifo" 2>&1 || harbor_rc=$?
+  run_shared_uv run --project "$EVOLVE_WORKSPACE" --frozen \
+    --python "$EVOLVE_FRAMEWORK_PYTHON" sh -c 'umask 077; exec "$@"' sh harbor "$@" \
+    > "$live_fifo" 2>&1 || harbor_rc=$?
   wait "$tee_pid" || true
   rm -f "$live_fifo"
 else
-  "$UV" run --project "$EVOLVE_WORKSPACE" --frozen \
-    --python "$EVOLVE_FRAMEWORK_PYTHON" harbor "$@" > "$EVOLVE_RUN_DIR/harbor.log" 2>&1 || harbor_rc=$?
+  run_shared_uv run --project "$EVOLVE_WORKSPACE" --frozen \
+    --python "$EVOLVE_FRAMEWORK_PYTHON" sh -c 'umask 077; exec "$@"' sh harbor "$@" \
+    > "$EVOLVE_RUN_DIR/harbor.log" 2>&1 || harbor_rc=$?
 fi
 "$EVOLVE_FRAMEWORK_PYTHON" evaluator/parse_score.py "$jobs_dir" "$EVOLVE_RUN_DIR" "$harbor_rc"
 parser_rc=$?

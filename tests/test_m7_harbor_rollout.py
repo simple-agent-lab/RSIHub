@@ -312,7 +312,6 @@ def test_harbor_rollout_reuses_only_a_complete_explicitly_enabled_stage(
 
 
 def test_harbor_rollout_preserves_missing_selected_results_as_trace_cases() -> None:
-
     cases = harbor_evidence._with_missing_result_placeholders(
         [
             {
@@ -330,6 +329,34 @@ def test_harbor_rollout_preserves_missing_selected_results_as_trace_cases() -> N
     assert missing["outcome"] == "incomplete"
     assert missing["exception"]["type"] == "MissingRolloutResult"
     assert "source_attempt" not in missing
+
+
+def test_harbor_rollout_canonicalizes_harbor_dataset_prefix_without_a_false_missing_case() -> None:
+    observed = "sierra-research/tau3-bench__tau3-banking_knowledge-task-083"
+    canonical = "tau3-banking_knowledge-task-083"
+
+    cases = harbor_evidence._with_missing_result_placeholders(
+        [{"task_name": observed, "reward": 0.0, "outcome": "failed"}],
+        [canonical],
+    )
+
+    assert cases == [
+        {
+            "task_name": canonical,
+            "observed_task_name": observed,
+            "reward": 0.0,
+            "outcome": "failed",
+        }
+    ]
+
+
+def test_harbor_rollout_task_canonicalization_prefers_exact_and_most_specific_ids() -> None:
+    selected = ["task-001", "dataset__task-001"]
+
+    assert harbor_evidence._canonical_task_name("dataset__task-001", selected) == "dataset__task-001"
+    assert harbor_evidence._canonical_task_name("registry/dataset__task-001", selected) == "dataset__task-001"
+    assert harbor_evidence._canonical_task_name("registry__dataset__task-001", selected) == "dataset__task-001"
+    assert harbor_evidence._canonical_task_name("registry__unknown", selected) is None
 
 
 def test_harbor_rollout_preserves_batch_failure_when_no_task_result_exists(tmp_path: Path) -> None:

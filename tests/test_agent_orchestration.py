@@ -466,6 +466,21 @@ def test_repair_removes_only_clean_stale_worktree(tmp_path: Path) -> None:
     assert not child.exists()
 
 
+def test_repair_removes_clean_interrupted_evaluation_worktree(tmp_path: Path) -> None:
+    workspace, evolve_home = init_workspace(tmp_path)
+    _certify_baseline(workspace, evolve_home)
+    parent = workspace / "runs/evaluation-worktrees/evolve-eval-interrupted"
+    checkout = parent / "checkout"
+    git(workspace, "worktree", "add", "--detach", str(checkout), "gen/0")
+
+    repair = run_evolve("repair", str(workspace), env={"EVOLVE_HOME": str(evolve_home)})
+
+    assert repair.returncode == 0, repair.stderr
+    assert "removed stale evaluation worktree" in repair.stdout
+    assert not checkout.exists()
+    assert not parent.exists()
+
+
 def test_driver_detects_agent_worktree_outside_managed_directory(tmp_path: Path) -> None:
     workspace, evolve_home = init_workspace(tmp_path)
     _certify_baseline(workspace, evolve_home)

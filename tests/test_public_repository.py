@@ -36,6 +36,10 @@ def test_tracked_files_use_only_current_project_identity() -> None:
         "evals/skills/make-paper-poster/recipe/evaluator/doctor_smoke.py": (f">{standalone}<",),
         "library/PROTOCOL.md": (f"{standalone} freely",),
         "skills/evolve-agent/agents/openai.yaml": (f"{standalone} agents",),
+        "src/evolve/viewer/app.py": (
+            f"X-{standalone}-Artifact-Truncated",
+            f"X-{standalone}-Diff-Base",
+        ),
     }
     result = subprocess.run(
         ["git", "ls-files", "-z"],

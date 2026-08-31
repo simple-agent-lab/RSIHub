@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shlex
 import shutil
 from pathlib import Path
@@ -9,7 +10,7 @@ from harbor.agents.installed.mini_swe_agent import MiniSweAgent
 
 from ._candidate_source import UnsafeCandidateSourceError, candidate_source_archive
 
-SOURCE_DIR = "/installed-agent/miniswe-source"
+SOURCE_DIR = "/tmp/evolve-miniswe-source"
 VENV_PYTHON = f"{SOURCE_DIR}/.venv/bin/python"
 UV_CACHE_DIR = "/opt/evolve/uv/cache"
 UV_PYTHON_INSTALL_DIR = "/opt/evolve/uv/python"
@@ -17,9 +18,9 @@ RUNNER_PATH = "/tmp/miniswe-source-run.py"
 TASK_PATH = "/tmp/miniswe-source-task.txt"
 LOG_PATH = "/logs/agent/mini-swe-agent.txt"
 RUNTIME_EVIDENCE_PATH = "/logs/agent/evolve-runtime.json"
-RUNTIME_UV_PATH = "/tmp/evolve-runtime-uv"
-RUNTIME_UV_VERSION_PATH = "/tmp/evolve-runtime-uv.version"
-SOURCE_ARCHIVE_PATH = "/tmp/evolve-miniswe-source.tar"
+RUNTIME_UV_PATH = f"{SOURCE_DIR}/.evolve-runtime-uv"
+RUNTIME_UV_VERSION_PATH = f"{SOURCE_DIR}/.evolve-runtime-uv.version"
+SOURCE_ARCHIVE_PATH = f"{SOURCE_DIR}/.evolve-source.tar"
 TAU3_MCP_CLI_PATH = "/tmp/tau3-mcp.py"
 TAU3_BANKING_MCP_CLI_HINT = (
     "Use the Bash tool to access the `tau3-runtime` MCP tools through "
@@ -259,7 +260,7 @@ from minisweagent.environments.local import LocalEnvironment, LocalEnvironmentCo
 task = Path(os.environ["MINISWE_TASK_PATH"]).read_text()
 config = get_config_from_spec(os.environ.get("MINISWE_CONFIG", "mini"))
 agent_kwargs = _filtered(config.get("agent"), AgentConfig.model_fields)
-_apply_evolved_context(agent_kwargs, "/installed-agent/miniswe-source")
+_apply_evolved_context(agent_kwargs, "/tmp/evolve-miniswe-source")
 env_kwargs = _filtered(config.get("environment"), LocalEnvironmentConfig.model_fields)
 env_kwargs["cwd"] = os.environ.get("MINISWE_CWD") or os.getcwd()
 env_kwargs["timeout"] = int(os.environ.get("MINISWE_ENV_TIMEOUT", env_kwargs.get("timeout") or 30))
@@ -282,7 +283,7 @@ from minisweagent.config import get_config_from_spec
 from minisweagent.environments.local import LocalEnvironment
 
 assert DefaultAgent and LocalEnvironment and get_config_from_spec
-_load_evolved_context("/installed-agent/miniswe-source")
+_load_evolved_context("/tmp/evolve-miniswe-source")
 print("EVOLVE_PREFLIGHT: miniswe_import_ok")
 """
 ).strip()
@@ -319,6 +320,7 @@ class CandidateMiniSweAgent(MiniSweAgent):
             )
         try:
             with candidate_source_archive(source_dir) as archive_path:
+                await self._prepare_source_directory(environment)
                 await environment.upload_file(archive_path, SOURCE_ARCHIVE_PATH)
         except UnsafeCandidateSourceError as error:
             raise EvolveCandidateInvalidError("EVOLVE_CANDIDATE_INVALID: unsafe_source_tree") from error
@@ -327,9 +329,8 @@ class CandidateMiniSweAgent(MiniSweAgent):
         await self._runtime_phase(
             environment,
             command=(
-                "set -euo pipefail; "
-                f"mkdir -p {SOURCE_DIR}; "
-                f"tar -xf {SOURCE_ARCHIVE_PATH} --no-same-owner --directory {SOURCE_DIR}"
+                f"set -euo pipefail; tar -xf {SOURCE_ARCHIVE_PATH} --no-same-owner --directory {SOURCE_DIR}; "
+                f"rm -f {SOURCE_ARCHIVE_PATH}"
             ),
             code="source_extract_failed",
             env=install_env,
@@ -338,9 +339,8 @@ class CandidateMiniSweAgent(MiniSweAgent):
             environment,
             command=(
                 "set -euo pipefail; "
-                f"if [ ! -f {RUNTIME_UV_PATH} ]; then "
+                f"if [ ! -x {RUNTIME_UV_PATH} ]; then "
                 'printf "EVOLVE_UV_BOOTSTRAP_MISSING\\n" >&2; false; fi; '
-                f"chmod 700 {RUNTIME_UV_PATH}; "
                 f"{RUNTIME_UV_PATH} --version > {RUNTIME_UV_VERSION_PATH}"
             ),
             code="uv_bootstrap_failed",
@@ -382,6 +382,19 @@ class CandidateMiniSweAgent(MiniSweAgent):
             code="uv_cleanup_failed",
             env={},
         )
+
+    async def _prepare_source_directory(self, environment) -> None:
+        """Create a private candidate path in the task user's writable temp area."""
+        try:
+            await self.exec_as_agent(
+                environment,
+                command=f"set -euo pipefail; rm -rf {SOURCE_DIR}; mkdir -m 0700 {SOURCE_DIR}",
+                env={},
+            )
+        except Exception as error:
+            raise EvolveRuntimeInfrastructureError(
+                f"EVOLVE_RUNTIME_INFRASTRUCTURE: source_directory_setup_failed: {error}"
+            ) from None
 
     async def _candidate_phase(self, environment, command: str, code: str, *, env: dict[str, str]) -> None:
         try:
@@ -431,7 +444,7 @@ class CandidateMiniSweAgent(MiniSweAgent):
         candidates = [self._get_env("EVOLVE_UV_BINARY") or "", shutil.which("uv") or ""]
         for candidate in candidates:
             path = Path(candidate).expanduser()
-            if path.is_file():
+            if path.is_file() and os.access(path, os.X_OK):
                 return path
         return None
 

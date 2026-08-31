@@ -396,6 +396,23 @@ def doctor_profile(
 
 @app.command()
 @_guard
+def view(
+    workspace: Path = typer.Argument(Path(".")),
+    host: str = typer.Option("127.0.0.1", "--host"),
+    port: str = typer.Option("8080-8089", "--port"),
+    catalog: Path | None = typer.Option(None, "--catalog", help="YAML catalog of experiment workspaces"),
+) -> None:
+    """Browse one workspace or a catalog of experiments without modifying them."""
+    from .viewer import run_catalog_viewer, run_viewer
+
+    if catalog is not None:
+        run_catalog_viewer(catalog, host, port)
+    else:
+        run_viewer(workspace, host, port)
+
+
+@app.command()
+@_guard
 def repair(workspace: Path = typer.Argument(Path("."))) -> None:
     """Explicitly repair interrupted state such as stale child worktrees."""
     actions = repair_workspace(workspace)

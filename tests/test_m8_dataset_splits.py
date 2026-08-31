@@ -469,13 +469,15 @@ def test_harbor_rollout_keeps_infra_tasks_without_outer_repair(tmp_path: Path, m
 
     cases = json.loads((context.run_dir / "rollout/cases.json").read_text())
     by_task = {case["task_name"]: case for case in cases}
-    assert by_task[f"terminal-bench/{selected[0]}"]["outcome"] == "passed"
-    infra = by_task[f"terminal-bench/{selected[1]}"]
+    assert by_task[selected[0]]["outcome"] == "passed"
+    assert by_task[selected[0]]["observed_task_name"] == f"terminal-bench/{selected[0]}"
+    infra = by_task[selected[1]]
     assert infra["outcome"] == "infra_error"
+    assert infra["observed_task_name"] == f"terminal-bench/{selected[1]}"
     assert infra["exception"]["type"] == "VerifierTimeoutError"
     assert not (context.run_dir / "rollout/repair").exists()
     assert result.summary["infra_errors"] == 1
-    assert result.summary["infra_tasks"] == [f"terminal-bench/{selected[1]}"]
+    assert result.summary["infra_tasks"] == [selected[1]]
     assert result.summary["tasks_observed"] == 2
 
 
@@ -496,6 +498,12 @@ def test_harbor_rollout_exact_task_replay_is_limited_to_frozen_train_split(tmp_p
         "dataset",
         1,
         ["terminal-bench/train-c", "terminal-bench/train-a"],
+    ) == ["train-c", "train-a"]
+    assert module._select_train_tasks(
+        tmp_path / "splits.json",
+        "dataset",
+        1,
+        ["registry/dataset__train-c", "registry__dataset__train-a"],
     ) == ["train-c", "train-a"]
     with pytest.raises(ValueError, match="frozen train split"):
         module._select_train_tasks(tmp_path / "splits.json", "dataset", 1, ["gate-a"])

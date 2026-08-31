@@ -49,6 +49,12 @@ def test_harbor_evaluator_uses_locked_workspace_runtime() -> None:
     assert 'harbor "$@"' in text
     assert '"$PWD/.evolve/launch_splits.py"' in text
     assert "export EVOLVE_UV_BINARY" in text
+    assert "run_shared_uv() (" in text
+    assert 'umask 000\n  exec "$UV" "$@"' in text
+    assert 'umask 077; exec "$@"' in text
+    assert 'mkdir -p "$EVOLVE_UV_CACHE_DIR"' in text
+    assert "! -perm -0005 -exec chmod a+rwx {} +" in text
+    assert "! -perm -0004 -exec chmod a+rw {} +" in text
 
 
 def test_harbor_score_parser_uses_framework_python(tmp_path: Path) -> None:
@@ -195,8 +201,8 @@ def test_harbor_evaluator_snapshot_closes_source_mutation_window(tmp_path: Path)
         "shift\n"
         '[ "$1" = "$EVOLVE_FRAMEWORK_PYTHON" ] || exit 94\n'
         "shift\n"
-        'if [ "$1" = python ]; then\n'
-        "  shift\n"
+        'if [ "$1" = sh ] && [ "${5:-}" = python ]; then\n'
+        "  shift 5\n"
         '  "$EVOLVE_FRAMEWORK_PYTHON" "$@"\n'
         "  command_rc=$?\n"
         "  printf '%s\\n' 'version = \"2.0\"' 'source = \"mutated\"' > \"$SOURCE_TASK_FILE\"\n"
@@ -1089,4 +1095,5 @@ def test_harbor_shell_uses_canonical_parser_result() -> None:
     assert '[ "$harbor_rc" -eq 0 ] || exit 3' not in text
     assert 'exit "$parser_rc"' in text
     assert 'harbor "$@" 2>&1 | tee' not in text
-    assert 'harbor "$@" > "$live_fifo" 2>&1 || harbor_rc=$?' in text
+    assert '> "$live_fifo" 2>&1 || harbor_rc=$?' in text
+    assert 'sh -c \'umask 077; exec "$@"\' sh harbor "$@"' in text
