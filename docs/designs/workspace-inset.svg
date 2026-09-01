@@ -12,13 +12,13 @@
 
   <!-- operators/ : stage scripts (green / driver policy) -->
   <rect x="22" y="100" width="416" height="34" rx="8" fill="#EAF4EC" stroke="#79A98B" stroke-width="1.4"/>
-  <text x="36" y="122" font-size="14" font-weight="bold" fill="#111111">operators/ &#183; library/</text>
-  <text x="424" y="122" text-anchor="end" font-size="13" fill="#111111">stage implementations</text>
+  <text x="36" y="122" font-size="14" font-weight="bold" fill="#111111">operators/</text>
+  <text x="424" y="122" text-anchor="end" font-size="13" fill="#111111">stage implementations (editable)</text>
 
   <!-- target/ : the candidate (white, bold border) -->
   <rect x="22" y="142" width="416" height="34" rx="8" fill="#FFFFFF" stroke="#1A1A1A" stroke-width="1.8"/>
   <text x="36" y="164" font-size="14" font-weight="bold" fill="#111111">target/</text>
-  <text x="424" y="164" text-anchor="end" font-size="13" fill="#111111">the candidate &#8212; only mutable surface</text>
+  <text x="424" y="164" text-anchor="end" font-size="13" fill="#111111">what evolves &#8212; the candidate program</text>
 
   <!-- evaluator/ : frozen scoring (orange / framework-controlled) -->
   <rect x="22" y="184" width="416" height="34" rx="8" fill="#FDF6E1" stroke="#DCAE55" stroke-width="1.4"/>
@@ -33,7 +33,7 @@
   <!-- runs/ : per-generation tree (orange / framework-controlled) -->
   <rect x="22" y="268" width="416" height="100" rx="8" fill="#FDF6E1" stroke="#DCAE55" stroke-width="1.4"/>
   <text x="36" y="290" font-size="14" font-weight="bold" fill="#111111">runs/</text>
-  <text x="424" y="290" text-anchor="end" font-size="13" fill="#111111">iteration history, one dir per generation</text>
+  <text x="424" y="290" text-anchor="end" font-size="13" fill="#111111">what happened &#8212; one dir per generation</text>
   <line x1="44" y1="297" x2="44" y2="350" stroke="#9A8A55" stroke-width="1.2"/>
   <line x1="44" y1="306" x2="56" y2="306" stroke="#9A8A55" stroke-width="1.2"/>
   <text x="62" y="310" font-size="13" font-weight="bold" fill="#111111">gen-1/</text>
