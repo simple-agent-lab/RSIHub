@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 378" role="img"
+     aria-label="A representative evolve.yaml recipe: target seed, mutable surface, operator bindings for each stage, and the frozen evaluator settings."
+     font-family="Times New Roman, Times, Georgia, serif">
+  <rect x="6" y="6" width="408" height="366" rx="14" fill="#FFFFFF" stroke="#1A1A1A" stroke-width="2"/>
+
+  <text x="24" y="40" font-size="19" font-weight="bold" fill="#111111">evolve.yaml<tspan font-size="13.5" font-weight="normal" fill="#333333">&#8194;&#8212; recipe</tspan></text>
+
+  <rect x="20" y="54" width="380" height="304" rx="8" fill="#F2F8F4" stroke="#79A98B" stroke-width="1.2"/>
+
+  <g font-family="Menlo, Consolas, 'DejaVu Sans Mono', 'Courier New', monospace" font-size="11" fill="#24312A">
+    <text x="34" y="74" xml:space="preserve"><tspan font-weight="bold">target</tspan>:  {seed: ./mini-swe-agent}</text>
+    <text x="34" y="89" xml:space="preserve"><tspan font-weight="bold">surface</tspan>: {include: [target/**]}</text>
+    <text x="34" y="104" xml:space="preserve"><tspan font-weight="bold">operators</tspan>:</text>
+    <text x="34" y="119" xml:space="preserve">  select:  {operator: <tspan font-weight="bold" fill="#2E6B4F">pareto</tspan>}</text>
+    <text x="34" y="134" xml:space="preserve">  rollout:</text>
+    <text x="34" y="149" xml:space="preserve">    operator: <tspan font-weight="bold" fill="#2E6B4F">harbor</tspan></text>
+    <text x="34" y="164" xml:space="preserve">    config: {budget_tasks: 10, n_concurrent: 4}</text>
+    <text x="34" y="179" xml:space="preserve">  analyze:</text>
+    <text x="34" y="194" xml:space="preserve">    operator: <tspan font-weight="bold" fill="#2E6B4F">gepa</tspan></text>
+    <text x="34" y="209" xml:space="preserve">    config:</text>
+    <text x="34" y="224" xml:space="preserve">      components: {system_prompt: target/prompt.md}</text>
+    <text x="34" y="239" xml:space="preserve">      max_cases: 10</text>
+    <text x="34" y="254" xml:space="preserve">  mutate:  {operator: <tspan font-weight="bold" fill="#2E6B4F">gepa</tspan>, config: {agent: codex}}</text>
+    <text x="34" y="269" xml:space="preserve">  gate:    {operator: <tspan font-weight="bold" fill="#2E6B4F">parent_eligible</tspan>}</text>
+    <text x="34" y="284" xml:space="preserve">  record:  {operator: <tspan font-weight="bold" fill="#2E6B4F">gepa</tspan>}</text>
+    <text x="34" y="299" xml:space="preserve"><tspan font-weight="bold">evaluator</tspan>:</text>
+    <text x="34" y="314" xml:space="preserve">  engine: harbor</text>
+    <text x="34" y="329" xml:space="preserve">  dataset: terminal-bench-2</text>
+    <text x="34" y="344" xml:space="preserve">  split:  {train: 0.5, gate: 0.4, sealed: 0.1}</text>
+  </g>
+</svg>

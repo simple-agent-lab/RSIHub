@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 330" role="img"
-     aria-label="Workspace layout: one Git repository containing the recipe, stage scripts, the mutable target, the frozen evaluator, the protected runtime, and the verified archive."
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 430" role="img"
+     aria-label="Workspace layout: one Git repository containing the recipe, stage scripts, the mutable target, the frozen evaluator, the protected console, per-generation run directories, and the verified archive."
      font-family="Times New Roman, Times, Georgia, serif">
-  <rect x="6" y="6" width="448" height="318" rx="14" fill="#FFFFFF" stroke="#1A1A1A" stroke-width="2"/>
+  <rect x="6" y="6" width="448" height="418" rx="14" fill="#FFFFFF" stroke="#1A1A1A" stroke-width="2"/>
 
   <text x="24" y="40" font-size="21" font-weight="bold" fill="#111111">Workspace<tspan font-size="14" font-weight="normal" fill="#333333">&#8194;&#8212; one Git repository</tspan></text>
 
@@ -25,13 +25,27 @@
   <text x="36" y="206" font-size="14" font-weight="bold" fill="#111111">evaluator/</text>
   <text x="424" y="206" text-anchor="end" font-size="13" fill="#111111">frozen scoring + splits</text>
 
-  <!-- ./evolve : protected runtime (orange / framework-controlled) -->
+  <!-- ./evolve : protected console (orange / framework-controlled) -->
   <rect x="22" y="226" width="416" height="34" rx="8" fill="#FDF6E1" stroke="#DCAE55" stroke-width="1.4"/>
-  <text x="36" y="248" font-size="14" font-weight="bold" fill="#111111">./evolve &#183; .evolve/</text>
-  <text x="424" y="248" text-anchor="end" font-size="13" fill="#111111">protected runtime &amp; console</text>
+  <text x="36" y="248" font-size="14" font-weight="bold" fill="#111111">./evolve</text>
+  <text x="424" y="248" text-anchor="end" font-size="13" fill="#111111">protected console &amp; runtime</text>
+
+  <!-- runs/ : per-generation tree (orange / framework-controlled) -->
+  <rect x="22" y="268" width="416" height="100" rx="8" fill="#FDF6E1" stroke="#DCAE55" stroke-width="1.4"/>
+  <text x="36" y="290" font-size="14" font-weight="bold" fill="#111111">runs/</text>
+  <text x="424" y="290" text-anchor="end" font-size="13" fill="#111111">iteration history, one dir per generation</text>
+  <line x1="44" y1="297" x2="44" y2="350" stroke="#9A8A55" stroke-width="1.2"/>
+  <line x1="44" y1="306" x2="56" y2="306" stroke="#9A8A55" stroke-width="1.2"/>
+  <text x="62" y="310" font-size="13" font-weight="bold" fill="#111111">gen-1/</text>
+  <text x="424" y="310" text-anchor="end" font-size="12" fill="#555555">rollout/ &#183; analyze/ &#183; mutate/ &#183; validate/</text>
+  <line x1="44" y1="328" x2="56" y2="328" stroke="#9A8A55" stroke-width="1.2"/>
+  <text x="62" y="332" font-size="13" font-weight="bold" fill="#111111">gen-2/</text>
+  <text x="424" y="332" text-anchor="end" font-size="12" fill="#555555">&#8943;</text>
+  <line x1="44" y1="350" x2="56" y2="350" stroke="#9A8A55" stroke-width="1.2"/>
+  <text x="62" y="354" font-size="13" font-weight="bold" fill="#111111">gen-&#10216;n&#10217;/</text>
 
   <!-- archive : verified archive (orange / framework-controlled) -->
-  <rect x="22" y="268" width="416" height="34" rx="8" fill="#FDF6E1" stroke="#DCAE55" stroke-width="1.4"/>
-  <text x="36" y="290" font-size="14" font-weight="bold" fill="#111111">archive.jsonl &#183; runs/</text>
-  <text x="424" y="290" text-anchor="end" font-size="13" fill="#111111">verified archive &#183; gen/&#10216;n&#10217; commits</text>
+  <rect x="22" y="376" width="416" height="34" rx="8" fill="#FDF6E1" stroke="#DCAE55" stroke-width="1.4"/>
+  <text x="36" y="398" font-size="14" font-weight="bold" fill="#111111">archive.jsonl</text>
+  <text x="424" y="398" text-anchor="end" font-size="13" fill="#111111">verified archive &#183; gen/&#10216;n&#10217; commits</text>
 </svg>
