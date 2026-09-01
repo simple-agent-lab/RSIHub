@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 330" role="img"
+     aria-label="Workspace layout: one Git repository containing the recipe, stage scripts, the mutable target, the frozen evaluator, the protected runtime, and the verified archive."
+     font-family="Times New Roman, Times, Georgia, serif">
+  <rect x="6" y="6" width="448" height="318" rx="14" fill="#FFFFFF" stroke="#1A1A1A" stroke-width="2"/>
+
+  <text x="24" y="40" font-size="21" font-weight="bold" fill="#111111">Workspace<tspan font-size="14" font-weight="normal" fill="#333333">&#8194;&#8212; one Git repository</tspan></text>
+
+  <!-- evolve.yaml : recipe (green / driver policy) -->
+  <rect x="22" y="58" width="416" height="34" rx="8" fill="#EAF4EC" stroke="#79A98B" stroke-width="1.4"/>
+  <text x="36" y="80" font-size="14" font-weight="bold" fill="#111111">evolve.yaml</text>
+  <text x="424" y="80" text-anchor="end" font-size="13" fill="#111111">recipe: operators &#183; target &#183; surfaces</text>
+
+  <!-- operators/ : stage scripts (green / driver policy) -->
+  <rect x="22" y="100" width="416" height="34" rx="8" fill="#EAF4EC" stroke="#79A98B" stroke-width="1.4"/>
+  <text x="36" y="122" font-size="14" font-weight="bold" fill="#111111">operators/ &#183; library/</text>
+  <text x="424" y="122" text-anchor="end" font-size="13" fill="#111111">stage implementations</text>
+
+  <!-- target/ : the candidate (white, bold border) -->
+  <rect x="22" y="142" width="416" height="34" rx="8" fill="#FFFFFF" stroke="#1A1A1A" stroke-width="1.8"/>
+  <text x="36" y="164" font-size="14" font-weight="bold" fill="#111111">target/</text>
+  <text x="424" y="164" text-anchor="end" font-size="13" fill="#111111">the candidate &#8212; only mutable surface</text>
+
+  <!-- evaluator/ : frozen scoring (orange / framework-controlled) -->
+  <rect x="22" y="184" width="416" height="34" rx="8" fill="#FDF6E1" stroke="#DCAE55" stroke-width="1.4"/>
+  <text x="36" y="206" font-size="14" font-weight="bold" fill="#111111">evaluator/</text>
+  <text x="424" y="206" text-anchor="end" font-size="13" fill="#111111">frozen scoring + splits</text>
+
+  <!-- ./evolve : protected runtime (orange / framework-controlled) -->
+  <rect x="22" y="226" width="416" height="34" rx="8" fill="#FDF6E1" stroke="#DCAE55" stroke-width="1.4"/>
+  <text x="36" y="248" font-size="14" font-weight="bold" fill="#111111">./evolve &#183; .evolve/</text>
+  <text x="424" y="248" text-anchor="end" font-size="13" fill="#111111">protected runtime &amp; console</text>
+
+  <!-- archive : verified archive (orange / framework-controlled) -->
+  <rect x="22" y="268" width="416" height="34" rx="8" fill="#FDF6E1" stroke="#DCAE55" stroke-width="1.4"/>
+  <text x="36" y="290" font-size="14" font-weight="bold" fill="#111111">archive.jsonl &#183; runs/</text>
+  <text x="424" y="290" text-anchor="end" font-size="13" fill="#111111">verified archive &#183; gen/&#10216;n&#10217; commits</text>
+</svg>
