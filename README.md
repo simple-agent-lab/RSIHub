@@ -74,29 +74,12 @@ edited, and which evaluations admit a new generation. The framework owns the
 mechanism that makes those decisions inspectable: clean candidate snapshots,
 protected scoring, surface enforcement, Git tags, and stamped archive records.
 
-The public composition model has four parts:
-
-- a **stage** is a fixed lifecycle slot such as `select`, `analyze`, or `mutate`;
-- an **operator** is a reusable implementation at
-  `library/<stage>/<name>.py`;
-- a **recipe** is code-free selection and configuration of those operators;
-- **evaluate** is the framework-owned trusted mechanism, never a selectable
-  operator.
-
-Add an operator to a source checkout, validate it, and compose it without a
-registry edit:
-
-```bash
-uv run --frozen evolve operator new mutate my_operator
-uv run --frozen evolve operator describe mutate/my_operator
-uv run --frozen evolve operator check mutate/my_operator --config '{}'
-uv run --frozen evolve operator list mutate
-uv run --frozen evolve recipe check /path/to/my-recipe/evolve.yaml
-```
-
-After `evolve init`, use `./evolve operator active .` to inspect the frozen
-bindings and `./evolve operator run ...` for direct stage orchestration. See
-[the operator guide](docs/reference/operators.md) for the complete workflow.
+Three terms cover the composition model: a **stage** is a fixed lifecycle
+slot such as `select`, `analyze`, or `mutate`; an **operator** is a reusable
+implementation of one stage; a **recipe** is code-free selection and
+configuration of those operators. Evaluation is never a selectable operator —
+it stays framework-owned. See [the operator guide](docs/reference/operators.md)
+for authoring, validating, and composing operators from the CLI.
 
 ## What Can Evolve
 
@@ -112,37 +95,20 @@ vendored framework mechanism stay outside that surface.
 ## Browse an Experiment
 
 `evolve view` serves a read-only view of one generated workspace, or a unified
-index of related workspaces with `--catalog`. It shows current experiment
-health, generation progress, modifications, canonical performance, and
-paginated trial outcomes. When a workspace retains Harbor jobs, linked trial
-rows open Harbor's full trajectory, logs, verifier output, and artifacts on the
-same server.
-
-For a workspace on DevBox, start the viewer there:
+index of related workspaces with `--catalog`:
 
 ```bash
-# On DevBox
-evolve view /data00/home/$USER/experiments/my-run
+evolve view /path/to/experiment
 ```
 
-The command binds to `127.0.0.1`, chooses the first free port from `8080-8089`,
-and prints the matching tunnel command. On the laptop, use the selected port
-(for example, `8080`):
+It shows experiment health, generation progress, modifications, canonical
+performance, and paginated trial outcomes. When a workspace retains Harbor
+jobs, trial rows open Harbor's full trajectory, logs, verifier output, and
+artifacts on the same server. The viewer is a local inspection tool, not an
+authorization boundary — it binds to loopback by default.
 
-```bash
-# On the laptop
-ssh -N -L 8080:127.0.0.1:8080 DevBox
-# Then open http://127.0.0.1:8080
-```
-
-The RSIHub pages poll filesystem summaries every three seconds and do not offer
-run, delete, upload, summarize, or authentication actions. This is a local
-inspection tool, not an authorization boundary: anyone who can access the
-listener or SSH tunnel can view the raw Harbor artifacts exposed by that
-workspace. Keep the default loopback binding and restrict tunnel access.
-
-See the [experiment viewer guide](docs/guides/experiment-viewer.md) for page behavior,
-artifact previews, Harbor inspection, and troubleshooting.
+See the [experiment viewer guide](docs/guides/experiment-viewer.md) for
+catalogs, remote (DevBox) tunnels, Harbor inspection, and troubleshooting.
 
 ## Recipes
 
@@ -322,19 +288,17 @@ composable strategies for different agent-evolution scenarios.
 
 ## Roadmap
 
-- **DeepSeek harness (`dsh`) integration:** integrate the DeepSeek harness as a
-  supported target agent alongside MiniSWE and Codex.
-- **Richer trajectory analysis tooling:** grow the analyze-stage toolbox with
-  more operators and utilities for inspecting, comparing, and mining rollout
-  trajectories, turning retained traces into actionable mutation feedback.
-- **Asynchronous evolution:** add asynchronous evolution modes where selection,
-  rollout, and mutation can overlap across generations instead of running in
-  lockstep, so long evaluations no longer block the rest of the loop.
-- **Scenario-oriented recipes:** compose the current operator library into
-  opinionated recipes for different agent-evolution use cases.
-- **Local-first workflows:** make lightweight, Docker-free iteration a
-  first-class path for trusted local agents, prompts, skills, and small features.
-- **More method integrations:** add evolution and search methods while preserving
+- **DeepSeek harness (`dsh`) integration:** a supported target agent alongside
+  MiniSWE and Codex.
+- **Richer trajectory analysis tooling:** more analyze-stage operators that turn
+  retained traces into actionable mutation feedback.
+- **Asynchronous evolution:** let selection, rollout, and mutation overlap
+  across generations instead of running in lockstep.
+- **Scenario-oriented recipes:** opinionated recipes for more agent-evolution
+  use cases.
+- **Local-first workflows:** first-class Docker-free iteration for trusted
+  local agents, prompts, and skills.
+- **More method integrations:** additional evolution and search methods under
   the shared evaluator, lineage, and evidence contracts.
 
 ## For AI Agents
@@ -363,11 +327,7 @@ Working on or with RSIHub from a coding agent? Start here:
 | [Design](docs/concepts/design.md) | System model, ownership boundaries, and invariants. |
 | [Architecture](ARCHITECTURE.md) | Enforced source-module map and line budgets. |
 | [Recipes](recipes/README.md) | Supported evolution strategies. |
-| [Evaluation assets](evals/README.md) | Skill behavior/routing evaluation cases and result snapshots. |
-| [Mutate operators](docs/guides/mutate-operators.md) | Trusted-host and isolated mutation runners. |
-| [Analyze](docs/reference/operators/analyze.md) | Trace retention and analysis operators. |
-| [Local environment](docs/guides/local-environment.md) | Docker-free trusted local execution. |
-| [Operations](docs/guides/operations.md) | Doctor profiles, runtime setup, full-loop smoke, and recovery. |
+| [Operators](docs/reference/operators.md) | Authoring, validating, and composing operators. |
 | [Experiment viewer](docs/guides/experiment-viewer.md) | Read-only experiment inspection, DevBox tunnels, and Harbor drill-down. |
 | [Contributing](CONTRIBUTING.md) | Development setup and repository conventions. |
 | [Releasing](RELEASING.md) | Source, artifact, and publication checklist. |
