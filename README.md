@@ -8,6 +8,12 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/KaiWU5/Awesome-AI4AI">
+    <img alt="Awesome AI4AI" src="https://img.shields.io/badge/Awesome-AI4AI-fc60a8?logo=awesomelists&amp;logoColor=white">
+  </a>
+  <a href="https://github.com/KaiWU5/Awesome-AI4AI/blob/main/assets/AI4AI-Survey.pdf">
+    <img alt="AI4AI Survey PDF" src="https://img.shields.io/badge/Survey-AI4AI%20(PDF)-b31b1b?logo=adobeacrobatreader&amp;logoColor=white">
+  </a>
   <a href="LICENSE">
     <img alt="Apache-2.0 License" src="https://img.shields.io/badge/License-Apache--2.0-0095fd?logo=opensourceinitiative&amp;logoColor=white">
   </a>
