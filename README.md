@@ -8,6 +8,15 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/KaiWU5/Awesome-AI4AI">
+    <img alt="Awesome AI4AI" src="https://img.shields.io/badge/Awesome-AI4AI-fc60a8?logo=awesomelists&amp;logoColor=white">
+  </a>
+  <a href="https://github.com/KaiWU5/Awesome-AI4AI/blob/main/assets/AI4AI-Survey.pdf">
+    <img alt="AI4AI Survey PDF" src="https://img.shields.io/badge/Survey-AI4AI%20(PDF)-b31b1b?logo=adobeacrobatreader&amp;logoColor=white">
+  </a>
+  <a href="https://simpleagentlab.com/ai4ai/">
+    <img alt="AI4AI Blog" src="https://img.shields.io/badge/Blog-AI4AI-6f42c1?logo=rss&amp;logoColor=white">
+  </a>
   <a href="LICENSE">
     <img alt="Apache-2.0 License" src="https://img.shields.io/badge/License-Apache--2.0-0095fd?logo=opensourceinitiative&amp;logoColor=white">
   </a>
@@ -32,6 +41,15 @@
   <a href="#quick-start">Quick Start</a> ·
   <a href="#documentation">Documentation</a>
 </p>
+
+> [!TIP]
+> **New to AI-for-AI and agent self-improvement?** Start with the curated
+> [Awesome-AI4AI](https://github.com/KaiWU5/Awesome-AI4AI) paper list, read the
+> [AI4AI Survey (PDF)](https://github.com/KaiWU5/Awesome-AI4AI/blob/main/assets/AI4AI-Survey.pdf)
+> for the full landscape, and follow the
+> [AI4AI blog](https://simpleagentlab.com/ai4ai/) for ongoing notes from
+> Simple Agent Lab. RSIHub is the experimental infrastructure that puts these
+> methods on common ground.
 
 <br>
 
