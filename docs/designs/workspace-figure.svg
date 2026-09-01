@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 500" role="img"
+     aria-label="Evolve workspace structure: a frozen mechanism and evaluator drive a select-mutate-evaluate-record loop over the evolvable target/, recorded as Git generations."
+     font-family="IBM Plex Sans, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#222826"/>
+    </marker>
+    <pattern id="hatch" width="7" height="7" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+      <rect width="7" height="7" fill="#F6F7F6"/>
+      <line x1="0" y1="0" x2="0" y2="7" stroke="#DFE3E0" stroke-width="2.4"/>
+    </pattern>
+  </defs>
+
+  <!-- init entry -->
+  <text x="440" y="26" text-anchor="middle" font-size="12" fill="#67706B">evolve init — recipe · seed · dataset</text>
+  <line x1="440" y1="36" x2="440" y2="54" stroke="#222826" stroke-width="1.6" marker-end="url(#ah)"/>
+
+  <!-- workspace container -->
+  <rect x="16" y="62" width="848" height="422" rx="14" fill="none" stroke="#B9C0BC" stroke-width="1.5"/>
+  <text x="40" y="94" font-size="12.5" font-weight="600" letter-spacing="1.5" fill="#1F2421">EVOLVE WORKSPACE</text>
+  <text x="840" y="94" text-anchor="end" font-size="11.5" fill="#67706B">one self-contained Git repository</text>
+
+  <!-- mechanism (frozen) -->
+  <rect x="44" y="136" width="156" height="84" rx="8" fill="url(#hatch)" stroke="#8A918D" stroke-width="1.3"/>
+  <text x="122" y="166" text-anchor="middle" font-size="13" font-weight="600" fill="#1F2421">./evolve console</text>
+  <text x="122" y="185" text-anchor="middle" font-size="10.5" fill="#555C58">.evolve/ vendored runtime</text>
+  <text x="122" y="201" text-anchor="middle" font-size="10.5" fill="#555C58">evolve.yaml recipe</text>
+
+  <!-- operators -->
+  <rect x="252" y="136" width="200" height="84" rx="8" fill="#FFFFFF" stroke="#222826" stroke-width="1.4"/>
+  <text x="352" y="166" text-anchor="middle" font-size="13" font-weight="600" fill="#1F2421">operators/ · library/</text>
+  <text x="352" y="185" text-anchor="middle" font-size="10.5" fill="#67706B">select · rollout · mutate</text>
+  <text x="352" y="201" text-anchor="middle" font-size="10.5" fill="#67706B">validate · gate · record</text>
+
+  <!-- target (evolvable) -->
+  <rect x="616" y="136" width="200" height="84" rx="8" fill="#E9F3EE" stroke="#2E7D5B" stroke-width="1.8"/>
+  <text x="716" y="166" text-anchor="middle" font-size="13" font-weight="600" fill="#1F4A37">target/</text>
+  <text x="716" y="185" text-anchor="middle" font-size="10.5" fill="#3E6B58">candidate program</text>
+  <text x="716" y="201" text-anchor="middle" font-size="10.5" fill="#3E6B58">(vendored seed copy)</text>
+
+  <!-- evaluator (frozen) -->
+  <rect x="616" y="336" width="200" height="84" rx="8" fill="url(#hatch)" stroke="#8A918D" stroke-width="1.3"/>
+  <text x="716" y="366" text-anchor="middle" font-size="13" font-weight="600" fill="#1F2421">evaluator/</text>
+  <text x="716" y="385" text-anchor="middle" font-size="10.5" fill="#555C58">frozen benchmark</text>
+  <text x="716" y="401" text-anchor="middle" font-size="10.5" fill="#555C58">pinned data · splits · runtime</text>
+
+  <!-- archive -->
+  <rect x="252" y="336" width="200" height="84" rx="8" fill="#FFFFFF" stroke="#222826" stroke-width="1.4"/>
+  <text x="352" y="366" text-anchor="middle" font-size="13" font-weight="600" fill="#1F2421">archive.jsonl · runs/</text>
+  <text x="352" y="385" text-anchor="middle" font-size="10.5" fill="#67706B">append-only lineage</text>
+  <text x="352" y="401" text-anchor="middle" font-size="10.5" fill="#67706B">commit + tag gen/&#10216;n&#10217;</text>
+
+  <!-- arrows -->
+  <line x1="200" y1="178" x2="244" y2="178" stroke="#222826" stroke-width="1.6" marker-end="url(#ah)"/>
+  <text x="222" y="168" text-anchor="middle" font-size="10.5" fill="#67706B">drives</text>
+
+  <line x1="452" y1="178" x2="608" y2="178" stroke="#222826" stroke-width="1.6" marker-end="url(#ah)"/>
+  <text x="530" y="165" text-anchor="middle" font-size="11" font-weight="500" fill="#1F2421">mutate</text>
+  <text x="530" y="196" text-anchor="middle" font-size="10.5" fill="#67706B">(surface paths only)</text>
+
+  <line x1="716" y1="226" x2="716" y2="328" stroke="#222826" stroke-width="1.6" marker-end="url(#ah)"/>
+  <text x="728" y="281" font-size="10.5" fill="#67706B">candidate snapshot</text>
+
+  <line x1="608" y1="378" x2="460" y2="378" stroke="#222826" stroke-width="1.6" marker-end="url(#ah)"/>
+  <text x="534" y="367" text-anchor="middle" font-size="11" font-weight="500" fill="#1F2421">score · verdict</text>
+
+  <line x1="352" y1="330" x2="352" y2="228" stroke="#222826" stroke-width="1.6" marker-end="url(#ah)"/>
+  <text x="340" y="281" text-anchor="end" font-size="10.5" fill="#67706B">select parent</text>
+
+  <text x="534" y="284" text-anchor="middle" font-size="10.5" font-style="italic" fill="#8A918D">one generation per round</text>
+
+  <!-- legend -->
+  <rect x="196" y="450" width="18" height="12" fill="url(#hatch)" stroke="#8A918D" stroke-width="1"/>
+  <text x="222" y="460" font-size="10.5" fill="#67706B">frozen — fixed at init, not a candidate input</text>
+  <rect x="479" y="450" width="18" height="12" fill="#E9F3EE" stroke="#2E7D5B" stroke-width="1.2"/>
+  <text x="505" y="460" font-size="10.5" fill="#67706B">evolvable — the only mutable surface</text>
+</svg>
