@@ -5,10 +5,10 @@ The maintained public documentation has distinct roles:
 | Document | Role |
 | --- | --- |
 | [Repository README](https://github.com/simple-agent-lab/RSIHub/blob/main/README.md) | concise repository overview and benchmark results |
-| [Quick start guide](https://github.com/simple-agent-lab/RSIHub/blob/main/QUICKSTART.md) | recipe launcher quick start |
+| [Quick start guide](https://github.com/simple-agent-lab/RSIHub/blob/main/docs/QUICKSTART.md) | recipe launcher quick start |
 | [`../index.md`](../index.md) | public documentation home |
 | [`../concepts/design.md`](../concepts/design.md) | framework model and ownership boundaries |
-| [Source architecture map](https://github.com/simple-agent-lab/RSIHub/blob/main/ARCHITECTURE.md) | enforced `src/evolve/` module map and budgets |
+| [Source architecture map](https://github.com/simple-agent-lab/RSIHub/blob/main/docs/ARCHITECTURE.md) | enforced `src/evolve/` module map and budgets |
 | [`../reference/terminology.md`](../reference/terminology.md) | canonical framework language |
 | [`coding-style.md`](coding-style.md) | coding conventions |
 | [`../rsihub-mark.svg`](../rsihub-mark.svg) | generated RSIHub Ring identity mark |

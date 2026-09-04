@@ -49,8 +49,8 @@ See the [design guide](concepts/design.md) for the complete model and invariants
 ## Repository resources
 
 - [Supported recipes](https://github.com/simple-agent-lab/RSIHub/tree/main/recipes)
-- [Source architecture map](https://github.com/simple-agent-lab/RSIHub/blob/main/ARCHITECTURE.md)
-- [Contributing guide](https://github.com/simple-agent-lab/RSIHub/blob/main/CONTRIBUTING.md)
+- [Source architecture map](https://github.com/simple-agent-lab/RSIHub/blob/main/docs/ARCHITECTURE.md)
+- [Contributing guide](https://github.com/simple-agent-lab/RSIHub/blob/main/.github/CONTRIBUTING.md)
 - [GitHub repository](https://github.com/simple-agent-lab/RSIHub)
 
 ## For AI agents

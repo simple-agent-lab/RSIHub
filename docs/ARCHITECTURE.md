@@ -2,7 +2,7 @@
 
 > **Note:** the enforced current-state map of `src/evolve/`. The design rationale
 > (three rings, the frozen contract, the operator registry) lives in
-> [the design guide](docs/concepts/design.md); this file is the authority on modules and budgets.
+> [the design guide](concepts/design.md); this file is the authority on modules and budgets.
 
 The ownership map of the mechanism. **This file is enforced**: 
 `tests/test_coherence.py` fails if a module exists that is not listed
@@ -116,15 +116,15 @@ boundary between rollout and feedback assembly; if the mechanism wants to
 grow past that, something belongs in a workspace operator instead —
 that is the spec's rule, not a style preference.
 
-## Root files
+## Repository files
 
 | File | Meaning |
 | --- | --- |
-| `ARCHITECTURE.md` | this map (enforced by tests/test_coherence.py) |
+| `docs/ARCHITECTURE.md` | this map (enforced by tests/test_coherence.py) |
 | `docs/concepts/design.md` | the design + rationale (three rings, mechanisms) — a maintained doc |
 | `docs/` | MkDocs user, technical, and contributor documentation |
 | `README.md` | user-facing overview — must never overstate milestone reality |
-| `CONTRIBUTING.md` | contributor entry (setup + the enforced constraints) |
+| `.github/CONTRIBUTING.md` | contributor entry (setup + the enforced constraints) |
 | `pyproject.toml`, `uv.lock` | packaging; runtime is stdlib-only |
 
 ## Dependency rules (enforced where cheap, reviewed otherwise)

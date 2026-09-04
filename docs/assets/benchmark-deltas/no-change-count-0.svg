@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="56" height="20" viewBox="0 0 56 20" role="img" aria-label="(0)">
   <style>
-    text { fill: #9a6700; font: 700 14px Inter, ui-sans-serif, system-ui, sans-serif; }
-    @media (prefers-color-scheme: dark) { text { fill: #d29922; } }
+    text { fill: #bc4c00; font: 700 14px Inter, ui-sans-serif, system-ui, sans-serif; }
+    @media (prefers-color-scheme: dark) { text { fill: #db6d28; } }
   </style>
   <text x="28" y="18" text-anchor="middle">(0)</text>
 </svg>

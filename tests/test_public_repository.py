@@ -15,7 +15,7 @@ SVG_NS = {"svg": "http://www.w3.org/2000/svg"}
 
 
 def maintained_current_files() -> list[Path]:
-    files = [ROOT / "README.md", ROOT / "ARCHITECTURE.md", ROOT / "CONTRIBUTING.md", ROOT / "QUICKSTART.md"]
+    files = [ROOT / "README.md", ROOT / ".github" / "CONTRIBUTING.md"]
     files.extend(path for path in (ROOT / "docs").rglob("*.md") if "superpowers" not in path.parts)
     files.extend((ROOT / "library").rglob("*.md"))
     files.extend((ROOT / "library").rglob("*.py"))
@@ -83,13 +83,18 @@ def _contrast_ratio(first: str, second: str) -> float:
     return (lighter + 0.05) / (darker + 0.05)
 
 
-def test_architecture_visual_uses_identity_palette() -> None:
-    svg = (ROOT / "docs" / "assets" / "architecture.svg").read_text()
-    for color in ("#10372e", "#19785a", "#65ce9f", "#b5d3c7", "#f2fbf7"):
-        assert color in svg
-    description = ET.parse(ROOT / "docs" / "assets" / "architecture.svg").find("svg:desc", SVG_NS).text
-    assert "Recipes select permitted targets, operators, and stages." in description
-    assert "rewrite any stage" not in description
+def test_architecture_visual_describes_the_seven_stage_loop() -> None:
+    root = ET.parse(ROOT / "docs" / "assets" / "architecture.svg").getroot()
+    assert root.attrib["role"] == "img"
+    labelled_by = root.attrib["aria-labelledby"].split()
+    assert len(labelled_by) == 2
+    assert root.find("svg:title", SVG_NS).attrib["id"] == labelled_by[0]
+    description = root.find("svg:desc", SVG_NS)
+    assert description.attrib["id"] == labelled_by[1]
+    for stage in ("select", "roll out", "analyze", "mutate", "guardrail", "evaluate", "absorb"):
+        assert stage in description.text
+    assert "guardrail and evaluate are framework-controlled" in description.text
+    assert "rewrite any stage" not in description.text
 
 
 def test_readme_visual_assets_have_accessible_svg_metadata() -> None:
@@ -363,11 +368,13 @@ def test_required_public_repository_files_exist() -> None:
     required = (
         "LICENSE",
         "NOTICE",
-        "CONTRIBUTING.md",
-        "SECURITY.md",
-        "CODE_OF_CONDUCT.md",
-        "SUPPORT.md",
-        "RELEASING.md",
+        ".github/CONTRIBUTING.md",
+        ".github/SECURITY.md",
+        ".github/CODE_OF_CONDUCT.md",
+        ".github/SUPPORT.md",
+        "docs/QUICKSTART.md",
+        "docs/RELEASING.md",
+        "docs/ARCHITECTURE.md",
         ".github/ISSUE_TEMPLATE/bug_report.yml",
         ".github/ISSUE_TEMPLATE/feature_request.yml",
         ".github/ISSUE_TEMPLATE/config.yml",
@@ -382,13 +389,15 @@ def test_required_public_repository_files_exist() -> None:
 def test_public_markdown_relative_links_resolve() -> None:
     files = [
         ROOT / "README.md",
-        ROOT / "QUICKSTART.md",
-        ROOT / "CONTRIBUTING.md",
+        ROOT / "AGENTS.md",
         ROOT / "recipes" / "README.md",
-        ROOT / "SECURITY.md",
-        ROOT / "CODE_OF_CONDUCT.md",
-        ROOT / "SUPPORT.md",
-        ROOT / "RELEASING.md",
+        ROOT / "docs" / "QUICKSTART.md",
+        ROOT / "docs" / "RELEASING.md",
+        ROOT / "docs" / "ARCHITECTURE.md",
+        ROOT / ".github" / "CONTRIBUTING.md",
+        ROOT / ".github" / "SECURITY.md",
+        ROOT / ".github" / "CODE_OF_CONDUCT.md",
+        ROOT / ".github" / "SUPPORT.md",
     ]
     broken = []
     for source in files:

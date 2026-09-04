@@ -1,6 +1,7 @@
 # Repository instructions
 
-Read `CONTRIBUTING.md`, `docs/concepts/design.md`, and `ARCHITECTURE.md` before making a
+Read `.github/CONTRIBUTING.md`, `docs/concepts/design.md`, and `docs/ARCHITECTURE.md` before
+making a
 non-trivial change. Preserve unrelated work in a dirty worktree and keep edits
 inside the requested scope.
 

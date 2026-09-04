@@ -61,15 +61,15 @@ site at https://simpleagentlab.com/RSIHub/.
 
 - [README](https://raw.githubusercontent.com/simple-agent-lab/RSIHub/main/README.md): Project overview, recipes, benchmark results, and roadmap.
 - [AGENTS.md](https://raw.githubusercontent.com/simple-agent-lab/RSIHub/main/AGENTS.md): Repository instructions for coding agents, including the layered test policy.
-- [QUICKSTART](https://raw.githubusercontent.com/simple-agent-lab/RSIHub/main/QUICKSTART.md): Recipe launcher setup against the pinned Terminal-Bench 2.0 subset.
-- [ARCHITECTURE](https://raw.githubusercontent.com/simple-agent-lab/RSIHub/main/ARCHITECTURE.md): Enforced source-module map and line budgets.
+- [QUICKSTART](https://raw.githubusercontent.com/simple-agent-lab/RSIHub/main/docs/QUICKSTART.md): Recipe launcher setup against the pinned Terminal-Bench 2.0 subset.
+- [ARCHITECTURE](https://raw.githubusercontent.com/simple-agent-lab/RSIHub/main/docs/ARCHITECTURE.md): Enforced source-module map and line budgets.
 - [Recipe guide](https://raw.githubusercontent.com/simple-agent-lab/RSIHub/main/recipes/README.md): Each supported strategy's workflow and configuration.
 - [Operator library](https://raw.githubusercontent.com/simple-agent-lab/RSIHub/main/library/README.md): The reusable operator implementations recipes compose.
-- [CONTRIBUTING](https://raw.githubusercontent.com/simple-agent-lab/RSIHub/main/CONTRIBUTING.md): Development setup and repository conventions.
+- [CONTRIBUTING](https://raw.githubusercontent.com/simple-agent-lab/RSIHub/main/.github/CONTRIBUTING.md): Development setup and repository conventions.
 
 ## Optional
 
 - [Evaluation assets](https://raw.githubusercontent.com/simple-agent-lab/RSIHub/main/evals/README.md): Skill behavior/routing evaluation cases and result snapshots.
 - [Documentation ownership](https://raw.githubusercontent.com/simple-agent-lab/RSIHub/main/docs/development/documentation.md): Which document owns which topic.
 - [Coding style](https://raw.githubusercontent.com/simple-agent-lab/RSIHub/main/docs/development/coding-style.md): Source conventions for contributions.
-- [Releasing](https://raw.githubusercontent.com/simple-agent-lab/RSIHub/main/RELEASING.md): Source, artifact, and publication checklist.
+- [Releasing](https://raw.githubusercontent.com/simple-agent-lab/RSIHub/main/docs/RELEASING.md): Source, artifact, and publication checklist.

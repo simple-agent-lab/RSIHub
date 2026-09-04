@@ -31,9 +31,9 @@ Supported values are `aevolve`, `ahe`, `ahe_codex`, `gepa`, `hill_climb`,
 profiles may use `CODEX_AUTH_JSON_PATH=/absolute/path/to/auth.json` instead of
 an API key. Use `WORKSPACE`, `TASKS`, `GENERATIONS`, `ENV_FILE`, or
 `EVOLVE_ASSET_DIR` to override launcher defaults. See the
-[recipe guide](recipes/README.md) and
-[operations guide](docs/guides/operations.md) for the full configuration and
+[recipe guide](https://github.com/simple-agent-lab/RSIHub/blob/main/recipes/README.md) and
+[operations guide](guides/operations.md) for the full configuration and
 recovery workflow.
 
 For evolution results on Terminal Bench 2 and Tau³ Banking, see the
-[benchmark results](README.md#benchmark-results) in the README.
+[benchmark results](https://github.com/simple-agent-lab/RSIHub/blob/main/README.md#benchmark-results) in the README.

@@ -1,4 +1,4 @@
-"""Enforces ARCHITECTURE.md and coding-style constraints.
+"""Enforces docs/ARCHITECTURE.md and coding-style constraints.
 
 When a rot pattern is caught in review, add an assertion here so the
 suite accumulates immune memory.
@@ -28,12 +28,12 @@ def _module_relpaths() -> set[str]:
 
 
 def _architecture_budgets() -> tuple[dict[str, int], int]:
-    architecture = (ROOT / "ARCHITECTURE.md").read_text()
+    architecture = (ROOT / "docs" / "ARCHITECTURE.md").read_text()
     rows = ARCHITECTURE_ROW.findall(architecture)
     budgets = {name: int(limit) for name, limit in rows}
     total = TOTAL_BUDGET.search(architecture)
-    assert len(rows) == len(budgets), "ARCHITECTURE.md must not list a module more than once"
-    assert total is not None, "ARCHITECTURE.md must declare the total src/evolve budget"
+    assert len(rows) == len(budgets), "docs/ARCHITECTURE.md must not list a module more than once"
+    assert total is not None, "docs/ARCHITECTURE.md must declare the total src/evolve budget"
     return budgets, int(total.group(1))
 
 
