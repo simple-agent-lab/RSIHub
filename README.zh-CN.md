@@ -85,25 +85,30 @@ RSIHub 为 agent 提供了一条受控的自我改进路径。它让候选 agent
 </p>
 
 recipe 决定：如何挑选父结点、如何分析轨迹、哪些文件允许被编辑、以及什么样的评测结果才能让新一代通过。
-框架独占其中两个阶段，让这些决策可被检验；所有试验都在
+框架独占其中两个 phase，让这些决策可被检验；所有试验都在
 [Harbor](https://github.com/harbor-framework/harbor) 上执行，由它提供容器化运行、轨迹捕获与逐任务验证。
 
-| 阶段 | 归属 | 做什么 |
-| --- | --- | --- |
-| `select` | recipe | 从归档中挑选一个合格的父结点，并检出它确切的那次 commit。 |
-| `rollout` | recipe | 在训练集上运行父结点，返回执行证据。 |
-| `analyze` | recipe | 把 rollout 轨迹提炼为范围受限的 mutation 依据。 |
-| `mutate` | recipe | 在声明过的 surface 内提出修改。 |
-| `guardrail` | **框架** | 用实际 diff 比对 surface，拒绝越界的修改提案。 |
-| `evaluate` | **框架** | 对审查后的候选 agent 做一次干净检出并打分，认证结果。 |
-| `absorb` | recipe | 决定是否准入、写入标注、并延续 lineage。 |
+图中标注的是主循环的七个 **phase（阶段）**。operator 挂载的则是九个具名的 **stage**——
+五个必需（`select`、`rollout`、`mutate`、`gate`、`record`），四个可选（下表中以 `*` 标记：
+`analyze`、`validate`、`novelty`、`reflect`）。有三个 phase 包含不止一个 stage，
+这也是两套名字对不上的原因：
+
+| Phase | 归属 | 在此运行的 stage | 做什么 |
+| --- | --- | --- | --- |
+| `select` | recipe | `select` | 从归档中挑选一个合格的父结点，并检出它确切的那次 commit。 |
+| `rollout` | recipe | `rollout` | 在训练集上运行父结点，返回执行证据。 |
+| `analyze` | recipe | `analyze`* | 把 rollout 轨迹提炼为范围受限的 mutation 依据。 |
+| `mutate` | recipe | `mutate` | 在声明过的 surface 内提出修改。 |
+| `guardrail` | **框架** | `validate`*、`novelty`* | 用实际的 tree diff 比对 surface。随后这两个可选 operator 可以否决提案：`validate` 施加方法特定的预评测检查，`novelty` 丢弃近似重复的改动。 |
+| `evaluate` | **框架** | 无 | 提交审查后的 tree，对干净检出打分并认证结果。此处不运行任何 recipe 选定的 operator。 |
+| `absorb` | recipe | `gate`、`record`、`reflect`* | `gate` 依据认证过的分数决定 child 是否成为 parent，`record` 提出标注，`reflect` 提炼供后续代际使用的洞见。 |
 
 理解组合模型只需三个术语：
 
 | 术语 | 含义 |
 | --- | --- |
-| `stage` 阶段 | 固定的生命周期槽位——即上表中的一行。 |
-| `operator` | 某个阶段的一份可复用实现，位于 `library/<stage>/<name>.py`。 |
+| `stage` 阶段 | 固定的生命周期槽位，名称与注册名严格一致：`select`、`rollout`、`analyze`、`mutate`、`validate`、`novelty`、`gate`、`record`、`reflect`。 |
+| `operator` | 某个 stage 的一份可复用实现，位于 `library/<stage>/<name>.py`。 |
 | `recipe` | 对这些 operator 的免代码选择与配置。 |
 
 evaluate 永远不是可选的 operator——它由框架独占。operator 的编写、校验与组合方式见

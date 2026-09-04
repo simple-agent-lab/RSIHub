@@ -89,25 +89,31 @@ Every recipe composes the same loop:
 
 A recipe decides how parent nodes are selected, how traces are analyzed, what
 may be edited, and which evaluations admit a new generation. The framework owns
-the two stages that make those decisions inspectable, and executes every trial
+the two phases that make those decisions inspectable, and executes every trial
 on [Harbor](https://github.com/harbor-framework/harbor), which provides
 container execution, trajectory capture, and per-task verification.
 
-| Stage | Owned by | What happens |
-| --- | --- | --- |
-| `select` | recipe | Choose an eligible parent node from the archive and fork its exact commit. |
-| `rollout` | recipe | Run the parent node on the training split and return execution evidence. |
-| `analyze` | recipe | Distill rollout traces into bounded mutation evidence. |
-| `mutate` | recipe | Propose edits inside the declared mutable surface. |
-| `guardrail` | **framework** | Check the actual diff against that surface and reject out-of-bounds proposals. |
-| `evaluate` | **framework** | Score a clean checkout of the reviewed candidate agent and certify the outcome. |
-| `absorb` | recipe | Decide admission, record annotations, and carry lineage forward. |
+The diagram labels the seven **phases** of the loop. Operators plug into nine
+named **stages** — five required (`select`, `rollout`, `mutate`, `gate`,
+`record`) and four optional, marked `*` below (`analyze`, `validate`, `novelty`,
+`reflect`). Three phases group more than one stage, which is why the two
+vocabularies differ:
+
+| Phase | Owned by | Stages that run here | What happens |
+| --- | --- | --- | --- |
+| `select` | recipe | `select` | Choose an eligible parent node from the archive and fork its exact commit. |
+| `rollout` | recipe | `rollout` | Run the parent node on the training split and return execution evidence. |
+| `analyze` | recipe | `analyze`* | Distill rollout traces into bounded mutation evidence. |
+| `mutate` | recipe | `mutate` | Propose edits inside the declared mutable surface. |
+| `guardrail` | **framework** | `validate`*, `novelty`* | Check the actual tree diff against the mutable surface. The two optional operators may then reject the proposal: `validate` applies a method-specific pre-evaluation check, `novelty` drops near-duplicates. |
+| `evaluate` | **framework** | none | Commit the reviewed tree, score a clean checkout, certify the outcome. No recipe-selected operator runs here. |
+| `absorb` | recipe | `gate`, `record`, `reflect`* | `gate` decides from the certified score whether the child becomes a parent, `record` proposes annotations, `reflect` distills insights for later generations. |
 
 Three terms cover the composition model:
 
 | Term | Meaning |
 | --- | --- |
-| `stage` | A fixed lifecycle slot — one row of the table above. |
+| `stage` | One fixed lifecycle slot, named exactly as registered: `select`, `rollout`, `analyze`, `mutate`, `validate`, `novelty`, `gate`, `record`, `reflect`. |
 | `operator` | One reusable implementation of a stage, at `library/<stage>/<name>.py`. |
 | `recipe` | Code-free selection and configuration of those operators. |
 
