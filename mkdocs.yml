@@ -37,8 +37,10 @@ theme:
 nav:
   - Home: index.md
   - Getting started: getting-started.md
+  - Quick start: QUICKSTART.md
   - Concepts:
       - Framework design: concepts/design.md
+      - Source architecture map: ARCHITECTURE.md
   - Guides:
       - Creating a custom recipe: guides/custom-recipes.md
       - From recipe to experiment: guides/recipe-to-experiment.md
@@ -63,6 +65,7 @@ nav:
   - Development:
       - Documentation ownership: development/documentation.md
       - Coding style: development/coding-style.md
+      - Releasing: RELEASING.md
 
 markdown_extensions:
   - admonition

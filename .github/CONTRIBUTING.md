@@ -1,7 +1,7 @@
 # Contributing
 
-Thank you for improving RSIHub. Read [the design guide](docs/concepts/design.md),
-[ARCHITECTURE.md](ARCHITECTURE.md), and [the coding style](docs/development/coding-style.md)
+Thank you for improving RSIHub. Read [the design guide](../docs/concepts/design.md),
+[the architecture map](../docs/ARCHITECTURE.md), and [the coding style](../docs/development/coding-style.md)
 before making a non-trivial change.
 
 ## Setup and checks
@@ -27,7 +27,7 @@ uv run --frozen pytest -q --run-slow path/to/test.py::test_name
 
 Run the default checks before opening a pull request. Run slow tests only when
 the change touches the workflow they exercise, or when a release gate requires
-them. See `AGENTS.md` for the test tiers and change-to-test mapping. Tests
+them. See [`AGENTS.md`](../AGENTS.md) for the test tiers and change-to-test mapping. Tests
 enforce the module inventory, recipe inventory, resource layout, and behavior
 contracts; do not keep stale tests green with compatibility shims.
 
@@ -51,7 +51,7 @@ them to the public recipe inventory.
 
 ## Architecture and tests
 
-`ARCHITECTURE.md` is an executable module map: every `src/evolve/**/*.py` file
+`docs/ARCHITECTURE.md` is an executable module map: every `src/evolve/**/*.py` file
 has one row and a line budget, enforced by `tests/test_coherence.py`. Update its
 row and honest budget in the same change as a source-module change.
 
@@ -66,7 +66,7 @@ Keep commits focused and update the maintained documentation with behavior:
 
 - `README.md` explains supported public workflows.
 - `docs/` contains the public MkDocs guides, reference, and system design.
-- `ARCHITECTURE.md` maps executable modules.
-- [`docs/development/documentation.md`](docs/development/documentation.md) defines documentation ownership.
+- `docs/ARCHITECTURE.md` maps executable modules.
+- [`docs/development/documentation.md`](../docs/development/documentation.md) defines documentation ownership.
 
 Avoid adding new prose files when one of these documents can be made clearer.

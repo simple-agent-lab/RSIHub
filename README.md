@@ -61,43 +61,59 @@
 
 ## What RSIHub Does
 
-RSIHub gives an agent a controlled way to improve itself. It runs candidates
-against a fixed evaluator, keeps the evidence for every generation, and carries
-verified improvements forward without letting candidate code rewrite the rules
-that score it.
+RSIHub gives an agent a controlled way to improve itself. It runs candidate
+agents against a fixed evaluator, keeps the **provenance** of every generation —
+what changed and why — and carries verified improvements to the agent forward
+while the evaluator itself stays untouched.
 
 - **For agent builders:** Improve prompts, skills, harnesses, and agent code in
   a reusable experiment workspace.
 - **For researchers:** Compare evolution strategies under fixed evaluation and
   mutation boundaries.
-- **Evidence built in:** Connect every candidate to scores, artifacts, archive
-  records, and Git lineage.
+- **Evidence built in:** Connect every candidate agent to scores, artifacts,
+  archive records, and Git lineage.
 
 ## How RSIHub Works
 
 Every recipe composes the same loop:
 
 <p align="center">
-  <strong>select → evaluate → analyze → mutate → gate → record</strong>
+  <strong>select → rollout → analyze → mutate → guardrail → evaluate → absorb</strong>
 </p>
 
 <p align="center">
   <a href="docs/assets/architecture.svg">
-    <img src="docs/assets/architecture.svg" alt="RSIHub architecture: five built-in strategies and custom recipes compose a loop of select, rollout and evaluation, analyze, mutate, gate, and record. The target and selected operators occupy a declared mutable surface. The evaluator, runtime, surface check, and stamped evidence remain protected from candidate changes.">
+    <img src="docs/assets/architecture.svg" alt="RSIHub architecture. Left: an evolution driver, where a recipe-driven evolve.yaml names the target seed, the mutable surface, one operator per stage, the evaluator, and the train/gate/sealed split, and writes to a verified archive of parent commits, evaluation records, and artifacts. Center: the evolution loop around a candidate — select a parent, roll out on train tasks, analyze to distill evidence, mutate the candidate, check boundaries at the guardrail, evaluate to score and certify, then absorb by recording and admitting. Select, rollout, analyze, mutate, and absorb are recipe policy stages; guardrail and evaluate are framework-controlled. Right: a protected runtime holding the Harbor executor, the frozen evaluation and its splits, and the workspace layout of evolve.yaml, operator, target, evaluator, runs, and archive.jsonl.">
   </a>
 </p>
 
-A recipe decides how parents are selected, how traces are analyzed, what may be
-edited, and which evaluations admit a new generation. The framework owns the
-mechanism that makes those decisions inspectable: clean candidate snapshots,
-protected scoring, surface enforcement, Git tags, and stamped archive records.
+A recipe decides how parent nodes are selected, how traces are analyzed, what
+may be edited, and which evaluations admit a new generation. The framework owns
+the two stages that make those decisions inspectable, and executes every trial
+on [Harbor](https://github.com/harbor-framework/harbor), which provides
+container execution, trajectory capture, and per-task verification.
 
-Three terms cover the composition model: a **stage** is a fixed lifecycle
-slot such as `select`, `analyze`, or `mutate`; an **operator** is a reusable
-implementation of one stage; a **recipe** is code-free selection and
-configuration of those operators. Evaluation is never a selectable operator —
-it stays framework-owned. See [the operator guide](docs/reference/operators.md)
-for authoring, validating, and composing operators from the CLI.
+| Stage | Owned by | What happens |
+| --- | --- | --- |
+| `select` | recipe | Choose an eligible parent node from the archive and fork its exact commit. |
+| `rollout` | recipe | Run the parent node on the training split and return execution evidence. |
+| `analyze` | recipe | Distill rollout traces into bounded mutation evidence. |
+| `mutate` | recipe | Propose edits inside the declared mutable surface. |
+| `guardrail` | **framework** | Check the actual diff against that surface and reject out-of-bounds proposals. |
+| `evaluate` | **framework** | Score a clean checkout of the reviewed candidate agent and certify the outcome. |
+| `absorb` | recipe | Decide admission, record annotations, and carry lineage forward. |
+
+Three terms cover the composition model:
+
+| Term | Meaning |
+| --- | --- |
+| `stage` | A fixed lifecycle slot — one row of the table above. |
+| `operator` | One reusable implementation of a stage, at `library/<stage>/<name>.py`. |
+| `recipe` | Code-free selection and configuration of those operators. |
+
+Evaluation is never a selectable operator — it stays framework-owned. See
+[the operator guide](docs/reference/operators.md) for authoring, validating, and
+composing operators from the CLI.
 
 ## What Can Evolve
 
@@ -107,13 +123,13 @@ for authoring, validating, and composing operators from the CLI.
 | harnesses and target code | tools, orchestration, agent implementation | agent engineering |
 | selected evolution operators | analysis or mutation policy chosen by a recipe | controlled co-evolution |
 
-Each recipe declares its mutable paths. Evaluators, archive stamps, and the
-vendored framework mechanism stay outside that surface.
+Each recipe declares its mutable paths. The evaluator, the archive stamps, and
+the framework code itself stay outside that surface.
 
 ## Browse an Experiment
 
-`evolve view` serves a read-only view of one generated workspace, or a unified
-index of related workspaces with `--catalog`:
+`evolve view` serves as a read-only view of one generated workspace, or as a
+unified index of related workspaces with `--catalog`:
 
 ```bash
 evolve view /path/to/experiment
@@ -123,7 +139,7 @@ It shows experiment health, generation progress, modifications, canonical
 performance, and paginated trial outcomes. When a workspace retains Harbor
 jobs, trial rows open Harbor's full trajectory, logs, verifier output, and
 artifacts on the same server. The viewer is a local inspection tool, not an
-authorization boundary — it binds to loopback by default.
+authorization boundary.
 
 See the [experiment viewer guide](docs/guides/experiment-viewer.md) for
 catalogs, remote (DevBox) tunnels, Harbor inspection, and troubleshooting.
@@ -132,7 +148,7 @@ catalogs, remote (DevBox) tunnels, Harbor inspection, and troubleshooting.
 
 | Choose this when you want to… | Recipe | Mutable surface |
 | --- | --- | --- |
-| improve one candidate from its current best parent | `hill_climb` | target |
+| improve one candidate agent from its current best parent node | `hill_climb` | target |
 | evolve prompts and reusable agent skills | `aevolve` | prompt and target skills |
 | engineer the agent harness against evaluator feedback | `ahe` | target |
 | balance multiple objectives with minibatch validation | `gepa` | prompt and task skill |
@@ -164,8 +180,8 @@ paper prompt produced both LoRA posters below.
 
 Across the four-paper showcase, the deterministic completion pass rate moved
 from **1/4** at Gen 0 to **4/4** at Gen 2. The trials ran concurrently through Harbor's local
-environment without Docker and retained ATIF trajectories plus evaluator-owned
-visual feedback. This is a representative evolution run rather than a broad
+environment without Docker, retaining the full agent trajectories alongside
+evaluator-owned visual feedback. This is a representative evolution run rather than a broad
 benchmark; see the [result snapshot](docs/results/paper-poster-skill-evolution.json),
 [frozen rubric](evals/skills/make-paper-poster/rubric.json), and
 [minimal seed Skill](evals/skills/make-paper-poster/seed/skills/make-paper-poster/SKILL.md).
@@ -175,16 +191,17 @@ benchmark; see the [result snapshot](docs/results/paper-poster-skill-evolution.j
 Run one of the supported recipes against the shared, content-pinned
 Terminal-Bench 2.0 subset with `./scripts/setup_terminal_bench.sh` and
 `./scripts/run_recipe_demo.sh`. The
-[quick start guide](QUICKSTART.md) covers prerequisites, credential setup,
+[quick start guide](docs/QUICKSTART.md) covers prerequisites, credential setup,
 supported recipe values, and launcher overrides.
 
 ## Benchmark Results
 
 Scores are percentages shown as **seed → evolved agent**. The train score is measured on
 the recipe's training split; the full benchmark score is measured across the
-complete benchmark. Parenthesized changes are purple for improvement, amber for
-no change, and red for regression. All runs use a GPT-5.4-high target model and
-a GPT-5.4-xhigh Codex mutate operator.
+complete benchmark. Parenthesized changes are purple for improvement, orange for
+no change, and red for regression. All runs use GPT-5.4 at high reasoning effort
+as the target model and a Codex mutate operator backed by GPT-5.4 at xhigh
+reasoning effort.
 
 <table width="100%">
   <thead>
@@ -290,9 +307,9 @@ a GPT-5.4-xhigh Codex mutate operator.
 
 RSIHub separates evolvable policy from the mechanism that judges it:
 
-1. **The evaluator is frozen.** Candidates cannot change the scoring contract.
+1. **The evaluator is frozen.** Candidate agents cannot change the scoring contract.
 2. **Mutation is bounded.** Each recipe declares which target and operator paths may change.
-3. **Evaluation is canonical.** New generations are scored from clean candidate snapshots.
+3. **Evaluation is canonical.** New generations are scored from a clean snapshot of the candidate agent.
 4. **Evidence is durable.** Reports recompute results from stamped `archive.jsonl` records and Git generation tags.
 
 Operators run as subprocesses rather than being imported into the framework
@@ -332,7 +349,7 @@ Working on or with RSIHub from a coding agent? Start here:
   edit).
 - [Terminology](docs/reference/terminology.md) — the glossary that defines the
   ubiquitous language used across the framework, recipes, and workspaces.
-- [Design](docs/concepts/design.md) and [ARCHITECTURE.md](ARCHITECTURE.md) —
+- [Design](docs/concepts/design.md) and [the architecture map](docs/ARCHITECTURE.md) —
   required reading before non-trivial changes; the operator contract in
   `src/evolve/frozen/interfaces.py` is authoritative for interfaces.
 
@@ -341,14 +358,14 @@ Working on or with RSIHub from a coding agent? Start here:
 | Document | Purpose |
 | --- | --- |
 | [Documentation site](https://simpleagentlab.com/RSIHub/) | Installation, operation, concepts, guides, and reference. |
-| [Quick start](QUICKSTART.md) | Recipe launcher setup and configuration. |
+| [Quick start](docs/QUICKSTART.md) | Recipe launcher setup and configuration. |
 | [Design](docs/concepts/design.md) | System model, ownership boundaries, and invariants. |
-| [Architecture](ARCHITECTURE.md) | Enforced source-module map and line budgets. |
+| [Architecture](docs/ARCHITECTURE.md) | Enforced source-module map and line budgets. |
 | [Recipes](recipes/README.md) | Supported evolution strategies. |
 | [Operators](docs/reference/operators.md) | Authoring, validating, and composing operators. |
 | [Experiment viewer](docs/guides/experiment-viewer.md) | Read-only experiment inspection, DevBox tunnels, and Harbor drill-down. |
-| [Contributing](CONTRIBUTING.md) | Development setup and repository conventions. |
-| [Releasing](RELEASING.md) | Source, artifact, and publication checklist. |
+| [Contributing](.github/CONTRIBUTING.md) | Development setup and repository conventions. |
+| [Releasing](docs/RELEASING.md) | Source, artifact, and publication checklist. |
 
 ## License
 
