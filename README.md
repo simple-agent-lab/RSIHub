@@ -42,6 +42,13 @@
   <a href="#documentation">Documentation</a>
 </p>
 
+<p align="center">
+  <img alt="English" src="https://img.shields.io/badge/English-0F766E?style=for-the-badge&amp;logo=googletranslate&amp;logoColor=white">
+  <a href="README.zh-CN.md">
+    <img alt="简体中文" src="https://img.shields.io/badge/%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-555555?style=for-the-badge">
+  </a>
+</p>
+
 > [!TIP]
 > **New to AI-for-AI and agent self-improvement?** Start with the curated
 > [Awesome-AI4AI](https://github.com/KaiWU5/Awesome-AI4AI) paper list, read the
