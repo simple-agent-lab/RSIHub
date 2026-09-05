@@ -45,7 +45,9 @@
   <a href="README.md">
     <img alt="English" src="https://img.shields.io/badge/English-555555?style=for-the-badge">
   </a>
-  <img alt="简体中文" src="https://img.shields.io/badge/%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-0F766E?style=for-the-badge&amp;logo=googletranslate&amp;logoColor=white">
+  <a href="README.zh-CN.md">
+    <img alt="简体中文" src="https://img.shields.io/badge/%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-0F766E?style=for-the-badge&amp;logo=googletranslate&amp;logoColor=white">
+  </a>
 </p>
 
 > [!TIP]
