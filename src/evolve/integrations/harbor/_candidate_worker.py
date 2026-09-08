@@ -10,6 +10,7 @@ from pathlib import Path
 from harbor.models.agent.context import AgentContext
 
 from ...runtime.files import read_regular_file, write_regular_file
+from ...runtime.policy import POLICY
 from ._worker_environment import WorkerEnvironment, decode_tree
 
 
@@ -28,7 +29,7 @@ async def main() -> None:
         number += 1
         control = inputs / "control" / f"{number}.json"
         while not control.exists():
-            await asyncio.sleep(0.02)
+            await asyncio.sleep(POLICY.poll_interval_s)
         request = json.loads(control.read_text())
         phase = request["phase"]
         if phase == "stop":

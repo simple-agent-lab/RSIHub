@@ -83,6 +83,7 @@ decision (and usually a demolition pass) instead of silent sprawl.
 | `runtime/process.py` | 250 | generated-workspace owned-process and evaluation-attempt helpers |
 | `runtime/model_bridge.py` | 175 | container-local HTTP client bridge to the metered file transport without provider credentials |
 | `runtime/model_broker.py` | 300 | host-owned metered model requests over an untrusted file transport with duplicate and unknown-cost protection |
+| `runtime/policy.py` | 125 | host-owned resource defaults, hard handoff limits and auditable policy values |
 | `runtime/files.py` | 175 | read regular files and explicit trees without following untrusted links |
 | `runtime/sandbox.py` | 200 | pinned offline container configuration and bounded tmpfs output |
 | `runtime/sandbox_io.py` | 225 | bounded process capture and validated archive transport |
@@ -130,11 +131,12 @@ each workspace, immutable there because it sits outside the mutable surface
 | File | Budget (lines) | Responsibility (one line — keep it true) |
 | --- | --- | --- |
 | `frozen/__init__.py` | 50 | the frozen-ring definition (litmus + two homes: contract/gate vs the evaluator) — the canonical anchor a contributor reads |
+| `frozen/public_artifacts.py` | 125 | versioned public artifact and aggregate feedback declarations |
 | `frozen/config.py` | 400 | dependency-free declarative operator config schemas, normalization, inspection descriptions, and path-aware errors |
 | `frozen/interfaces.py` | 375 | operator ABCs, registry, result schemas, and strict operator payload validation |
 | `frozen/sdk.py` | 350 | Python operator entrypoint and file-contract IO; no library algorithm policy |
 
-Total `src/evolve/` budget: **27140 lines**. The budget admits the read-only experiment viewer,
+Total `src/evolve/` budget: **27390 lines**. The budget admits the read-only experiment viewer,
 the explicit content-backed
 evaluation-contract boundaries, the opt-in in-place Harbor runtime, and the redacted trace-analysis
 boundary between rollout and feedback assembly; if the mechanism wants to

@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from .files import read_regular_file, write_regular_file
+from .policy import POLICY
 from .process import run_owned
 
 
@@ -22,7 +23,7 @@ class ModelBrokerConfig:
     command: tuple[str, ...]
     max_requests: int
     max_cost_usd: float
-    timeout_s: float = 120.0
+    timeout_s: float = POLICY.model_request_timeout_s
 
     def validate(self) -> None:
         if not self.command or any(not isinstance(a, str) or not a or "\0" in a for a in self.command):
@@ -77,7 +78,9 @@ class ModelBroker:
                     request_id = path.stem
                     if not re.fullmatch(r"[a-f0-9]{32}", request_id):
                         raise RuntimeError("invalid model request ID")
-                    encoded = read_regular_file(self.output, f"broker/requests/{path.name}", max_bytes=32 * 1024 * 1024)
+                    encoded = read_regular_file(
+                        self.output, f"broker/requests/{path.name}", max_bytes=POLICY.max_file_bytes
+                    )
                     digest = hashlib.sha256(encoded).hexdigest()
                     if request_id in self.seen:
                         if self.seen[request_id] != digest:
@@ -87,7 +90,7 @@ class ModelBroker:
                     self._request(request_id, encoded, digest)
                     if self.stop.is_set():
                         break
-                self.stop.wait(0.02)
+                self.stop.wait(POLICY.poll_interval_s)
         except BaseException as exc:
             self.failure = str(exc)
             self.stop.set()
@@ -143,7 +146,7 @@ class ModelBroker:
         try:
             if result.returncode or result.timed_out:
                 raise ValueError("model handler failed or timed out")
-            response = json.loads(read_regular_file(directory, "response.json", max_bytes=32 * 1024 * 1024))
+            response = json.loads(read_regular_file(directory, "response.json", max_bytes=POLICY.max_file_bytes))
             self._validate_response(response)
         except (OSError, RuntimeError, ValueError, TypeError):
             receipt.update(status="unaccounted", returncode=result.returncode, timed_out=result.timed_out)

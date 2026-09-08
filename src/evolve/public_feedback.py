@@ -7,60 +7,13 @@ import math
 from pathlib import Path
 from typing import Any
 
+from .frozen.public_artifacts import FEEDBACK_FILES, METRICS, ROW_FIELDS
 from .runtime.files import read_regular_file
-
-_ROW_FIELDS = {
-    "genid",
-    "parent",
-    "tag",
-    "candidate_commit",
-    "target_tree",
-    "operators_tree",
-    "evaluator_tree",
-    "task_set_hash",
-    "score",
-    "cost_usd",
-    "valid_parent",
-    "kind",
-    "round",
-    "purpose",
-    "status",
-    "outcome",
-    "eval_scope",
-    "n_tasks",
-    "n_trials",
-}
-_METRICS = {
-    "score",
-    "accuracy",
-    "pass_rate",
-    "cost_usd",
-    "usd",
-    "total_cost_usd",
-    "total_tokens",
-    "input_tokens",
-    "output_tokens",
-    "cached_tokens",
-    "n_tasks",
-    "total_tasks",
-    "passed_tasks",
-    "failed_tasks",
-    "tasks_total",
-    "tasks_passed",
-    "tasks_failed",
-    "agent_errors",
-    "infra_errors",
-    "incomplete_tasks",
-    "agent_timeout_count",
-    "n_trials",
-    "expected_trials",
-    "scoreable_trials",
-}
 
 
 def archive_row(row: dict[str, Any]) -> dict[str, Any]:
     """Exclude task vectors, free prose, verifier exceptions and arbitrary extras."""
-    result = {k: v for k, v in row.items() if k in _ROW_FIELDS and (v is None or type(v) in (str, int, float, bool))}
+    result = {k: v for k, v in row.items() if k in ROW_FIELDS and (v is None or type(v) in (str, int, float, bool))}
     if isinstance(row.get("evals"), list):
         result["evals"] = [archive_row(e) for e in row["evals"] if isinstance(e, dict) and e.get("purpose") != "anchor"]
     return result
@@ -68,7 +21,7 @@ def archive_row(row: dict[str, Any]) -> dict[str, Any]:
 
 def operator_feedback(run_dir: Path) -> dict[str, bytes]:
     files = {}
-    for filename in ("rollout/summary.json", "analyze/summary.json", "mutate/usage.json"):
+    for filename in FEEDBACK_FILES:
         if not (run_dir / filename).exists():
             continue
         data = json.loads(read_regular_file(run_dir, filename))
@@ -77,7 +30,7 @@ def operator_feedback(run_dir: Path) -> dict[str, bytes]:
         projected = {
             key: value
             for key, value in data.items()
-            if key in _METRICS and type(value) in (int, float) and math.isfinite(value)
+            if key in METRICS and type(value) in (int, float) and math.isfinite(value)
         }
         files[filename] = json.dumps(projected).encode()
     gate = run_dir / "gate.json"

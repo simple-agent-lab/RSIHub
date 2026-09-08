@@ -14,14 +14,17 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from .files import read_regular_file, write_regular_file
+from .policy import POLICY
 
-_MAX_BYTES = 16 * 1024 * 1024
+_MAX_BYTES = POLICY.model_body_bytes
 
 
 class ModelBridge(ThreadingHTTPServer):
     daemon_threads = True
 
-    def __init__(self, output: Path, timeout_s: float = 125):
+    def __init__(
+        self, output: Path, timeout_s: float = POLICY.model_request_timeout_s + POLICY.model_transport_grace_s
+    ):
         self.output = output
         self.timeout_s = timeout_s
         super().__init__(("127.0.0.1", 0), _Request)
@@ -60,14 +63,14 @@ class _Request(BaseHTTPRequestHandler):
             while True:
                 try:
                     encoded = read_regular_file(
-                        self.server.output, f"broker/responses/{identifier}.json", max_bytes=32 * 1024 * 1024
+                        self.server.output, f"broker/responses/{identifier}.json", max_bytes=POLICY.max_file_bytes
                     )
                     break
                 except FileNotFoundError:
                     if time.monotonic() >= deadline:
                         self.send_error(504, "model response timed out; request was not retried")
                         return
-                    time.sleep(0.02)
+                    time.sleep(POLICY.poll_interval_s)
             response = json.loads(encoded)
             status, content_type = response["status"], response["content_type"]
             if type(status) is not int or not 100 <= status <= 599:
@@ -86,7 +89,9 @@ class _Request(BaseHTTPRequestHandler):
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--timeout", type=float, default=125)
+    parser.add_argument(
+        "--timeout", type=float, default=POLICY.model_request_timeout_s + POLICY.model_transport_grace_s
+    )
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     command = args.command[1:] if args.command[:1] == ["--"] else args.command

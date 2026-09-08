@@ -38,7 +38,7 @@ def run_candidate_package(
             "candidate_commit": manifest["candidate_commit"],
             "target_tree": manifest["target_tree"],
             "command": command,
-            "boundary": boundary_receipt(image_id),
+            "boundary": boundary_receipt(image_id, config),
         }
         receipt_path = run_dir / "execution.json"
         receipt_path.write_text(json.dumps(receipt, sort_keys=True) + "\n")

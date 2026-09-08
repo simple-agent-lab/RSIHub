@@ -180,7 +180,7 @@ def test_setup_downloads_once_and_builds_codex_image_for_ahe(tmp_path: Path) -> 
         for call in calls
     )
     builds = [call for call in calls if call[:2] == ["docker", "build"]]
-    assert len(builds) == 1
+    assert len(builds) == 2
     assert "evolve-mutate-codex:20260904-codex0149" in builds[0]
     assert "./scripts/run_recipe_demo.sh ahe" in second.stdout
 
@@ -193,7 +193,7 @@ def test_setup_builds_codex_image_for_gepa(tmp_path: Path) -> None:
     assert "evolve-mutate-codex:20260904-codex0149" in build
 
 
-def test_setup_reuses_provisioned_codex_image_when_available(tmp_path: Path) -> None:
+def test_setup_ignores_legacy_base_image_when_available(tmp_path: Path) -> None:
     environment, calls_path = _environment(tmp_path)
     Path(environment["DOCKER_STATE"]).write_text(json.dumps({"evolve-mutate-codex:20260818-codex0146": "0.146.0"}))
 
@@ -203,8 +203,8 @@ def test_setup_reuses_provisioned_codex_image_when_available(tmp_path: Path) -> 
 
     assert result.returncode == 0, result.stderr
     build = next(call for call in _calls(calls_path) if call[:2] == ["docker", "build"])
-    assert ["--build-arg", "RUNTIME_BASE=evolve-mutate-codex:20260818-codex0146"] == build[4:6]
-    assert ["--build-arg", "INSTALL_TOOLS=0"] == build[6:8]
+    assert not any("RUNTIME_BASE=" in arg or "INSTALL_TOOLS=" in arg for arg in build)
+    assert not any(call[:3] == ["docker", "image", "inspect"] for call in _calls(calls_path))
 
 
 def test_setup_supports_full_hyperagents_with_the_official_export(tmp_path: Path) -> None:

@@ -7,10 +7,12 @@ import stat
 import uuid
 from pathlib import Path, PurePosixPath
 
-MAX_FILE_BYTES = 32 * 1024 * 1024
-MAX_TREE_BYTES = 64 * 1024 * 1024
-MAX_TREE_ENTRIES = 4096
-MAX_TREE_DEPTH = 32
+from .policy import POLICY
+
+MAX_FILE_BYTES = POLICY.max_file_bytes
+MAX_TREE_BYTES = POLICY.max_tree_bytes
+MAX_TREE_ENTRIES = POLICY.max_tree_entries
+MAX_TREE_DEPTH = POLICY.max_tree_depth
 
 
 class FileTree(dict[str, bytes]):

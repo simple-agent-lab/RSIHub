@@ -89,3 +89,40 @@ def test_sandbox_rejects_overlapping_mounts(tmp_path: Path, monkeypatch, nested:
             inputs=root if nested else child,
             output=child if nested else root,
         )
+
+
+def test_nondefault_limits_are_identical_in_launch_and_receipt(tmp_path, monkeypatch):
+    from evolve.runtime.policy import POLICY
+
+    monkeypatch.setattr("evolve.runtime.sandbox.os.getuid", lambda: 1000)
+    inputs, output = tmp_path / "input", tmp_path / "output"
+    inputs.mkdir()
+    output.mkdir()
+    job = {}
+
+    def run(command, **kwargs):
+        job.update(json.loads(Path(command[-1]).read_text()))
+        return OwnedResult(0, json.dumps(asdict(OwnedResult(0, "", "", 0.1, False))), "", 0.1, False)
+
+    monkeypatch.setattr("evolve.runtime.sandbox.run_owned", run)
+    run_sandbox(
+        SandboxConfig("fixture", 2, memory_mb=256, pids=32, output_mb=1),
+        image_id=IMAGE,
+        command=["true"],
+        inputs=inputs,
+        output=output,
+    )
+    boundary = job["boundary"]
+    assert boundary["output_mount"]["max_bytes"] == 1024 * 1024
+    assert any("/output:rw,nosuid,nodev,size=1m," in arg for arg in job["argv"])
+    assert boundary["resources"] == {"memory_mb": 256, "pids": 32, "timeout_s": 2}
+    assert job["argv"][job["argv"].index("--memory") + 1] == "256m"
+    assert job["argv"][job["argv"].index("--pids-limit") + 1] == "32"
+    assert boundary["resource_policy"] == POLICY.receipt()
+
+
+@pytest.mark.parametrize("limit", [0, 65, True, 1.5])
+def test_output_cannot_exceed_host_policy(limit, monkeypatch):
+    monkeypatch.setattr("evolve.runtime.sandbox.os.getuid", lambda: 1000)
+    with pytest.raises(RuntimeError, match="sandbox output"):
+        SandboxConfig("fixture", 2, output_mb=limit).validate()

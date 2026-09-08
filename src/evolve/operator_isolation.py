@@ -9,23 +9,12 @@ from pathlib import Path
 from typing import Any
 
 from .config import Resource
+from .frozen.public_artifacts import OUTPUTS, SCHEMA_VERSION
 from .public_feedback import archive_row, operator_feedback
 from .runtime.files import make_directories, read_regular_file, read_tree, write_regular_file, write_tree
 from .runtime.process import OwnedResult
 from .runtime.sandbox import SandboxConfig, resolve_image, run_sandbox
 from .surface import check_paths, surface_patterns
-
-_OUTPUTS = {
-    "select": ("parents.json",),
-    "rollout": ("rollout",),
-    "analyze": ("analyze",),
-    "mutate": ("mutate",),
-    "validate": ("validate",),
-    "novelty": ("novelty", "novelty.json"),
-    "gate": ("gate.json",),
-    "record": ("record",),
-    "reflect": (),
-}
 
 
 def session_sandbox(workspace: Path, timeout_s: float) -> SandboxConfig | None:
@@ -69,7 +58,7 @@ def run_isolated_operator(
     config_block: dict[str, Any],
     sandbox: SandboxConfig,
 ) -> OwnedResult:
-    if name not in _OUTPUTS:
+    if name not in OUTPUTS:
         raise RuntimeError("unknown isolated operator stage")
     run_dir.mkdir(parents=True, exist_ok=True)
     root = Path(tempfile.mkdtemp(prefix=f"isolated-{name}-", dir=run_dir))
@@ -123,6 +112,7 @@ def run_isolated_operator(
         json.dumps(
             {
                 "role": "development",
+                "schema_version": SCHEMA_VERSION,
                 "files": sorted(observations),
                 "archive": "aggregate scores and candidate identities; no task vectors or private logs",
                 "independent_holdout": False,
@@ -171,7 +161,7 @@ def run_isolated_operator(
     violations = check_paths(changes, include, exclude)
     if violations:
         raise RuntimeError("isolated operator changed forbidden paths: " + ", ".join(violations))
-    artifacts = {key: data for key, data in read_tree(output / "artifacts").items() if _selected(key, _OUTPUTS[name])}
+    artifacts = {key: data for key, data in read_tree(output / "artifacts").items() if _selected(key, OUTPUTS[name])}
     appended = None
     if name == "reflect":
         from .frozen.interfaces import validate_reflect_payload

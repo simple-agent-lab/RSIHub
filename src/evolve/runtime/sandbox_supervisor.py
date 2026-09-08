@@ -11,6 +11,7 @@ import time
 from pathlib import Path
 
 from evolve.runtime.files import read_tree, write_tree
+from evolve.runtime.policy import POLICY
 from evolve.runtime.sandbox_io import (
     ARCHIVE_LIMIT,
     RESPONSES,
@@ -32,7 +33,17 @@ def supervise(job: dict, receipt: Path) -> dict:
     sent: dict[str, bytes] = {}
 
     def save(state: str) -> None:
-        receipt.write_text(json.dumps({"container": name, "owner_pid": job["owner_pid"], "state": state, **result}))
+        receipt.write_text(
+            json.dumps(
+                {
+                    "container": name,
+                    "owner_pid": job["owner_pid"],
+                    "state": state,
+                    "boundary": job.get("boundary"),
+                    **result,
+                }
+            )
+        )
 
     def command(args: list[str], **kwargs):
         if os.getppid() != job["owner_pid"]:
@@ -42,7 +53,7 @@ def supervise(job: dict, receipt: Path) -> dict:
             result["timed_out"] = True
             raise RuntimeError("sandbox deadline exceeded")
         try:
-            return capture([docker, *args], timeout=min(15, remaining), **kwargs)
+            return capture([docker, *args], timeout=min(POLICY.docker_command_timeout_s, remaining), **kwargs)
         except RuntimeError:
             if time.monotonic() >= deadline:
                 result["timed_out"] = True
@@ -103,8 +114,8 @@ def supervise(job: dict, receipt: Path) -> dict:
                 # Recopy after completion: the previous snapshot may predate final writes.
                 sync()
                 break
-            time.sleep(0.02)
-        code, stdout, stderr = command(["logs", "--tail", "1000", name])
+            time.sleep(POLICY.poll_interval_s)
+        code, stdout, stderr = command(["logs", "--tail", str(POLICY.log_tail_lines), name])
         if code:
             raise RuntimeError("sandbox logs unavailable")
         result.update(stdout=stdout.decode(errors="replace"), stderr=stderr.decode(errors="replace"))
@@ -112,7 +123,7 @@ def supervise(job: dict, receipt: Path) -> dict:
         result.update(returncode=1, stderr=str(exc)[:2000])
     finally:
         try:
-            code, _, error = capture([docker, "rm", "-f", name], timeout=15)
+            code, _, error = capture([docker, "rm", "-f", name], timeout=POLICY.cleanup_timeout_s)
         except Exception as exc:
             code, error = 1, str(exc).encode()
         if code and b"No such container" not in error:

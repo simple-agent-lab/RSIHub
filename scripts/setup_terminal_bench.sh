@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+source "$ROOT/containers/runtime-versions.env"
 RECIPE=${1:-}
 CALLER=$PWD
 ASSET_ROOT=${EVOLVE_ASSET_DIR:-$ROOT/.evolve-assets/terminal-bench-2.0}
@@ -22,19 +23,14 @@ trap cleanup EXIT
 
 case "$RECIPE" in
   hyperagents_tbench_full)
-    IMAGE=evolve-mutate-app:20260724-tools-mswe245
+    IMAGE=$MINISWE_IMAGE
     IMAGE_CONTEXT=$ROOT/containers/mutate
-    IMAGE_LABEL=io.evolve.miniswe.version
-    IMAGE_VERSION=2.4.5
-    BUILD_ARGS=(--build-arg MINISWE_VERSION=2.4.5)
+    BUILD_ARGS=(--build-arg "MINISWE_VERSION=$MINISWE_VERSION")
     ;;
   aevolve|ahe|hyperagents|ahe_codex|gepa|hill_climb|hill_climb_codex|hyperagents_codex|hyperagents_codex_tbench_full)
-    IMAGE=evolve-mutate-codex:20260904-codex0149
+    IMAGE=$CODEX_IMAGE
     IMAGE_CONTEXT=$ROOT/containers/mutate-codex
-    IMAGE_LABEL=io.evolve.codex.version
-    IMAGE_VERSION=0.149.0
-    BUILD_ARGS=(--build-arg CODEX_VERSION=0.149.0)
-    REUSABLE_CODEX_BASE=evolve-mutate-codex:20260818-codex0146
+    BUILD_ARGS=(--build-arg "CODEX_VERSION=$CODEX_VERSION")
     ;;
   *)
     echo "unsupported recipe '$RECIPE'; supported recipes: aevolve, ahe, ahe_codex, gepa, hill_climb, hill_climb_codex, hyperagents, hyperagents_codex, hyperagents_tbench_full, hyperagents_codex_tbench_full" >&2
@@ -56,15 +52,6 @@ if [[ ! $GIT_MAJOR =~ ^[0-9]+$ || ! $GIT_MINOR =~ ^[0-9]+$ ]] ||
 fi
 docker info >/dev/null 2>&1 || { echo "Docker daemon is unavailable" >&2; exit 2; }
 
-if [[ ${REUSABLE_CODEX_BASE:-} ]]; then
-  REUSABLE_CODEX_VERSION=$(
-    docker image inspect --format "{{ index .Config.Labels \"$IMAGE_LABEL\" }}" "$REUSABLE_CODEX_BASE" 2>/dev/null || true
-  )
-  if [[ $REUSABLE_CODEX_VERSION == 0.146.0 ]]; then
-    BUILD_ARGS+=(--build-arg "RUNTIME_BASE=$REUSABLE_CODEX_BASE" --build-arg INSTALL_TOOLS=0)
-  fi
-fi
-
 cd "$ROOT"
 uv sync --frozen
 mkdir -p "$ASSET_ROOT"
@@ -78,10 +65,9 @@ if [[ ! -d "$RAW_DATASET/terminal-bench" ]]; then
 fi
 uv run --frozen python scripts/examples/terminal_bench_smoke/prepare_dataset.py "$RAW_DATASET" "$DATASET"
 
-INSTALLED_VERSION=$(docker image inspect --format "{{ index .Config.Labels \"$IMAGE_LABEL\" }}" "$IMAGE" 2>/dev/null || true)
-if [[ $INSTALLED_VERSION != "$IMAGE_VERSION" ]]; then
-  docker build "${BUILD_ARGS[@]}" -t "$IMAGE" "$IMAGE_CONTEXT"
-fi
+# Always resolve the declared Dockerfile; Docker reuses matching build layers.
+# A local tag or version label does not establish the expected base/toolchain.
+docker build "${BUILD_ARGS[@]}" -t "$IMAGE" "$IMAGE_CONTEXT"
 
 echo "Terminal-Bench 2.0 setup is ready at $READY_DATASET"
 echo "EVOLVE_ASSET_DIR=\"$ASSET_ROOT\" ./scripts/run_recipe_demo.sh $RECIPE"

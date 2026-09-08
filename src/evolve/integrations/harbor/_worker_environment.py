@@ -13,6 +13,7 @@ from typing import Any
 from harbor.environments.base import ExecResult
 
 from ...runtime.files import read_regular_file, read_tree, write_regular_file, write_tree
+from ...runtime.policy import POLICY
 
 
 def encode_tree(root: Path) -> dict[str, dict[str, Any]]:
@@ -49,7 +50,7 @@ class WorkerEnvironment:
         )
         response = self.output / f"rpc/responses/{request_id}.json"
         while not response.exists():
-            await asyncio.sleep(0.02)
+            await asyncio.sleep(POLICY.poll_interval_s)
         payload = json.loads(read_regular_file(self.output, f"rpc/responses/{request_id}.json"))
         if "error" in payload:
             raise RuntimeError(payload["error"])

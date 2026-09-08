@@ -12,6 +12,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
+from .policy import MIB, POLICY
 from .process import OwnedResult, run_owned
 
 
@@ -19,10 +20,10 @@ from .process import OwnedResult, run_owned
 class SandboxConfig:
     image: str
     timeout_s: float
-    memory_mb: int = 1024
-    pids: int = 128
+    memory_mb: int = POLICY.default_memory_mb
+    pids: int = POLICY.default_pids
     docker: str = "docker"
-    output_mb: int = 64
+    output_mb: int = POLICY.max_output_mb
 
     def validate(self) -> None:
         if not self.image or self.image.startswith("-") or any(c in self.image for c in "\0\r\n"):
@@ -31,8 +32,8 @@ class SandboxConfig:
             raise RuntimeError("sandbox requires a positive finite timeout")
         if any(type(n) is not int or n < 1 for n in (self.memory_mb, self.pids)):
             raise RuntimeError("sandbox memory and process limits must be positive integers")
-        if type(self.output_mb) is not int or not 1 <= self.output_mb <= 64:
-            raise RuntimeError("sandbox output must be between 1 and 64 MiB")
+        if type(self.output_mb) is not int or not 1 <= self.output_mb <= POLICY.max_output_mb:
+            raise RuntimeError(f"sandbox output must be between 1 and {POLICY.max_output_mb} MiB")
         if os.getuid() == 0:
             raise RuntimeError("sandbox launcher must run as a non-root user")
 
@@ -49,7 +50,7 @@ def resolve_image(config: SandboxConfig, directory: Path) -> str:
         [config.docker, "image", "inspect", "--format", "{{.Id}}", config.image],
         cwd=directory,
         env=_environment(),
-        timeout_s=15,
+        timeout_s=POLICY.docker_command_timeout_s,
     )
     identity = result.stdout.strip()
     if result.returncode or result.timed_out or not re.fullmatch(r"sha256:[0-9a-f]{64}", identity):
@@ -91,8 +92,8 @@ def run_sandbox(
         "run",
         "--detach",
         "--log-driver=local",
-        "--log-opt=max-size=1m",
-        "--log-opt=max-file=1",
+        f"--log-opt=max-size={POLICY.log_bytes}",
+        f"--log-opt=max-file={POLICY.log_files}",
         "--log-opt=compress=false",
         "--pull=never",
         "--name",
@@ -110,18 +111,18 @@ def run_sandbox(
         "--user",
         f"{os.getuid()}:{os.getgid()}",
         "--tmpfs",
-        "/tmp:rw,nosuid,nodev,size=128m",
+        f"/tmp:rw,nosuid,nodev,size={POLICY.tmp_mb}m",
         "--workdir",
         "/output",
         "--mount",
         f"type=bind,src={inputs},dst=/input,readonly",
         "--tmpfs",
-        f"/output:rw,nosuid,nodev,size={config.output_mb}m,nr_inodes=8192,uid={os.getuid()},gid={os.getgid()},mode=0700",
+        f"/output:rw,nosuid,nodev,size={config.output_mb}m,nr_inodes={POLICY.output_inodes},uid={os.getuid()},gid={os.getgid()},mode=0700",
         "--entrypoint",
         "/bin/sh",
         image_id,
         "-c",
-        "while [ ! -f /tmp/.evolve-start ]; do sleep 0.02; done; "
+        f"while [ ! -f /tmp/.evolve-start ]; do sleep {POLICY.poll_interval_s}; done; "
         '"$@"; code=$?; printf "%s" "$code" > /tmp/.evolve-exit; '
         "while :; do sleep 1; done",
         "evolve-entrypoint",
@@ -141,6 +142,7 @@ def run_sandbox(
                 "timeout_s": config.timeout_s,
                 "output": str(output),
                 "argv": argv[1:],
+                "boundary": boundary_receipt(image_id, config),
             }
         )
     )
@@ -148,10 +150,10 @@ def run_sandbox(
         [sys.executable, "-m", "evolve.runtime.sandbox_supervisor", str(job_path)],
         cwd=lease,
         env={**_environment(), "PYTHONPATH": str(Path(__file__).resolve().parents[2])},
-        timeout_s=config.timeout_s + 90,
+        timeout_s=config.timeout_s + POLICY.supervisor_grace_s,
     )
     if result.returncode or result.timed_out:
-        run_owned([config.docker, "rm", "-f", name], cwd=lease, env=_environment(), timeout_s=15)
+        run_owned([config.docker, "rm", "-f", name], cwd=lease, env=_environment(), timeout_s=POLICY.cleanup_timeout_s)
         raise RuntimeError("sandbox supervisor failed; inspect its lease and cleanup receipt: " + str(lease))
     payload = json.loads(result.stdout)
     if "cleanup is unconfirmed" in payload["stderr"]:
@@ -159,15 +161,17 @@ def run_sandbox(
     return OwnedResult(**payload)
 
 
-def boundary_receipt(image_id: str) -> dict[str, object]:
+def boundary_receipt(image_id: str, config: SandboxConfig) -> dict[str, object]:
     return {
         "image_id": image_id,
         "network": "none",
         "host_environment_forwarded": [],
         "input_mount": {"path": "/input", "read_only": True},
-        "output_mount": {"path": "/output", "read_only": False, "type": "tmpfs", "max_bytes": 64 * 1024 * 1024},
+        "output_mount": {"path": "/output", "read_only": False, "type": "tmpfs", "max_bytes": config.output_mb * MIB},
         "supervision": "independent host process with owner-death and deadline cleanup",
         "host_pid_namespace": False,
         "docker_socket": False,
         "uid": os.getuid(),
+        "resources": {"memory_mb": config.memory_mb, "pids": config.pids, "timeout_s": config.timeout_s},
+        "resource_policy": POLICY.receipt(),
     }

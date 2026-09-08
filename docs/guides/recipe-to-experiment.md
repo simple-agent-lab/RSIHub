@@ -28,6 +28,13 @@ Terminal-Bench subset and builds the selected mutation-agent image:
 
 For a custom recipe, prepare the Docker image named by the recipe yourself.
 
+Runtime version pins live in `containers/runtime-versions.env`. The setup script
+reads these pins and always builds from the declared Dockerfile and pinned base;
+Docker's matching build layers provide caching. It does not substitute a locally
+available older image or trust its version label to skip the build. Standalone
+Dockerfile, seed and controller defaults are checked against the manifest by
+`tests/test_runtime_version_pins.py`; update them together when changing a pin.
+
 ## 2. Check the recipe and run prospective preflight
 
 Resolve every binding and validate every named operator config first:

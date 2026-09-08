@@ -445,6 +445,20 @@ input tree. Cleanup can take up to 15 additional seconds. This protection requir
 a surviving supervisor and reachable Docker daemon; simultaneous host/supervisor
 failure or daemon unavailability still requires external reconciliation.
 
+Resource defaults and hard handoff limits are declared once in
+`src/evolve/runtime/policy.py`. The host selects `SandboxConfig` memory, PID,
+wall-time and output limits; output may only be reduced below the policy ceiling.
+Candidates cannot override host policy through returned files. Boundary receipts
+record the effective configuration (including any remaining-time reduction) and
+the versioned resource policy. Defaults do not retroactively change already
+vendored workspaces.
+
+Public artifact paths and aggregate feedback fields are declared in
+`src/evolve/frozen/public_artifacts.py` (protocol version 1). This is a host-owned
+allowlist, not a candidate-supplied configuration. New declarations require
+information-exposure review; undeclared metrics remain excluded. Existing
+projection behavior is unchanged.
+
 ### Isolated continuous controller transport
 
 `evolve agent run-controller WORKSPACE --continuous --sandbox-image sha256:IMAGE_ID

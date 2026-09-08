@@ -20,14 +20,19 @@ from .files import (
     read_tree,
     write_regular_file,
 )
+from .policy import POLICY
 
-ARCHIVE_LIMIT = MAX_TREE_BYTES + MAX_TREE_ENTRIES * 2048
-LOG_LIMIT = 1024 * 1024
+ARCHIVE_LIMIT = POLICY.archive_bytes
+LOG_LIMIT = POLICY.log_bytes
 RESPONSES = ("broker/responses", "rpc/responses")
 
 
 def capture(
-    command: list[str], *, timeout: float = 15, limit: int = LOG_LIMIT, data: bytes | None = None
+    command: list[str],
+    *,
+    timeout: float = POLICY.docker_command_timeout_s,
+    limit: int = LOG_LIMIT,
+    data: bytes | None = None,
 ) -> tuple[int, bytes, bytes]:
     """Bound both pipes while reading; never collect arbitrary output first."""
     with tempfile.TemporaryFile() as stdin:

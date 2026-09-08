@@ -28,6 +28,7 @@ from .agent_launcher import (
 )
 from .agent_queue import defer_action, drive_controller, resolve_deferred, resume_controller
 from .runtime.model_broker import ModelBrokerConfig
+from .runtime.policy import POLICY
 from .runtime.sandbox import SandboxConfig
 
 
@@ -112,7 +113,7 @@ def build_agent_app(guard) -> typer.Typer:
         model_handler: str | None = typer.Option(None, "--model-handler", help="trusted host model-handler executable"),
         model_handler_arg: list[str] = typer.Option([], "--model-handler-arg"),
         max_model_requests: int = typer.Option(100, "--max-model-requests", min=1),
-        model_request_timeout: float = typer.Option(120.0, "--model-request-timeout", min=0.1),
+        model_request_timeout: float = typer.Option(POLICY.model_request_timeout_s, "--model-request-timeout", min=0.1),
     ) -> None:
         """Run one resumable, durably metered outer-controller attempt."""
         limits = ControllerLimits(

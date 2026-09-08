@@ -20,6 +20,7 @@ from harbor.models.agent.context import AgentContext
 
 from ...candidate.package import export_candidate, materialize_candidate
 from ...runtime.files import make_directories, read_regular_file, read_tree, write_regular_file, write_tree
+from ...runtime.policy import POLICY
 from ...runtime.process import run_owned
 from ...runtime.sandbox import SandboxConfig, resolve_image, run_sandbox
 from ._time_budget import read_agent_time_budget
@@ -132,7 +133,7 @@ class IsolatedCandidateAgent(BaseAgent):
         return self._root / "output/control" / f"{self._number}.json"
 
     def _response(self, response: Path, context: AgentContext | None = None) -> dict[str, Any]:
-        payload = json.loads(read_regular_file(response.parent, response.name, max_bytes=32 * 1024 * 1024))
+        payload = json.loads(read_regular_file(response.parent, response.name, max_bytes=POLICY.max_file_bytes))
         if not isinstance(payload, dict):
             raise RuntimeError("invalid candidate worker response")
         self._version = payload.get("version", self._version)
@@ -165,7 +166,7 @@ class IsolatedCandidateAgent(BaseAgent):
         for path in sorted((output / "rpc/requests").glob("*.json")):
             if not re.fullmatch(r"[a-f0-9]{32}", path.stem):
                 raise RuntimeError("invalid candidate environment request ID")
-            encoded = read_regular_file(output, f"rpc/requests/{path.name}", max_bytes=32 * 1024 * 1024)
+            encoded = read_regular_file(output, f"rpc/requests/{path.name}", max_bytes=POLICY.max_file_bytes)
             digest = hashlib.sha256(encoded).hexdigest()
             if path.stem in self._seen:
                 if self._seen[path.stem] != digest:
@@ -194,7 +195,7 @@ class IsolatedCandidateAgent(BaseAgent):
         while not response.exists():
             self._check_alive()
             await self._rpc(environment)
-            await asyncio.sleep(0.02)
+            await asyncio.sleep(POLICY.poll_interval_s)
         return self._response(response, result_context)
 
     async def setup(self, environment) -> None:
@@ -238,7 +239,7 @@ class IsolatedCandidateAgent(BaseAgent):
                 self._check_alive()
                 if time.monotonic() >= deadline:
                     raise RuntimeError("candidate post-run parsing timed out")
-                time.sleep(0.02)
+                time.sleep(POLICY.poll_interval_s)
             result = AgentContext.model_validate(self._response(response)["context"])
             for key, value in result.model_dump().items():
                 setattr(context, key, value)
@@ -266,7 +267,10 @@ class IsolatedCandidateAgent(BaseAgent):
                 result = self._future.result(timeout=2)
             except TimeoutError:
                 run_owned(
-                    [self._config.docker, "rm", "-f", self._name], cwd=self._root, env=dict(os.environ), timeout_s=15
+                    [self._config.docker, "rm", "-f", self._name],
+                    cwd=self._root,
+                    env=dict(os.environ),
+                    timeout_s=POLICY.cleanup_timeout_s,
                 )
                 result = self._future.result(timeout=20)
             (self._root / "worker.stdout").write_text(result.stdout)

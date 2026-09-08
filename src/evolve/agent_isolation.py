@@ -13,6 +13,7 @@ from .agent_optimizer import verify_optimizer
 from .candidate.package import export_candidate, materialize_candidate
 from .runtime.files import read_regular_file, read_tree, write_tree
 from .runtime.model_broker import ModelBroker, ModelBrokerConfig
+from .runtime.policy import POLICY
 from .runtime.process import OwnedResult
 from .runtime.sandbox import SandboxConfig, boundary_receipt, resolve_image, run_sandbox
 from .surface import check_paths, surface_patterns
@@ -75,10 +76,10 @@ def run_isolated_controller(
             if child.is_dir() and (child / "target").is_dir():
                 write_tree(inputs / "children" / child.name / "target", read_tree(child / "target"))
     image_id = resolve_image(sandbox, attempt_dir)
-    (attempt_dir / "isolation.json").write_text(json.dumps(boundary_receipt(image_id), sort_keys=True) + "\n")
     config = (
         replace(sandbox, timeout_s=min(sandbox.timeout_s, remaining_wall)) if remaining_wall is not None else sandbox
     )
+    (attempt_dir / "isolation.json").write_text(json.dumps(boundary_receipt(image_id, config), sort_keys=True) + "\n")
     usage: dict[str, int | float | None] = {"total_tokens": 0, "cost_usd": 0.0}
     if broker is None:
         result = run_sandbox(config, image_id=image_id, command=command, inputs=inputs, output=output)
@@ -89,6 +90,7 @@ def run_isolated_controller(
             {
                 "__init__.py": b"",
                 "runtime/__init__.py": b"",
+                "runtime/policy.py": (framework / "runtime/policy.py").read_bytes(),
                 "runtime/files.py": (framework / "runtime/files.py").read_bytes(),
                 "runtime/model_bridge.py": (framework / "runtime/model_bridge.py").read_bytes(),
             },
@@ -96,7 +98,14 @@ def run_isolated_controller(
         (inputs / "model-client.py").write_text(
             "import sys\nsys.path.insert(0, '/input/framework')\nfrom evolve.runtime.model_bridge import main\nmain()\n"
         )
-        command = ["python3", "/input/model-client.py", "--timeout", str(broker.timeout_s + 5), "--", *command]
+        command = [
+            "python3",
+            "/input/model-client.py",
+            "--timeout",
+            str(broker.timeout_s + POLICY.model_transport_grace_s),
+            "--",
+            *command,
+        ]
         (inputs / "model-broker.json").write_text(
             json.dumps({"requests": "/output/broker/requests", "responses": "/output/broker/responses"}) + "\n"
         )
