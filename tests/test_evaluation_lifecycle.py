@@ -172,7 +172,7 @@ def test_candidate_infrastructure_failure_is_recorded_without_automatic_retry(
 
 
 def test_agent_prepare_uses_development_only_then_continuous_seal_compares_baseline(tmp_path: Path) -> None:
-    from evolve.agent_driver import AgentLimits, execute_action, parse_action, seal_submitted, start_session
+    from evolve.agent_driver import AgentLimits, execute_action, parse_action, seal_research, start_session
     from evolve.orchestration import prepare_agent_baseline
 
     workspace = _lifecycle_workspace(tmp_path, {"genesis": ["benchmark_complete"], "anchor": ["benchmark_complete"]})
@@ -182,12 +182,12 @@ def test_agent_prepare_uses_development_only_then_continuous_seal_compares_basel
     method = tmp_path / "method"
     method.mkdir()
     (method / "instructions.md").write_text("research")
-    start_session(workspace, AgentLimits(10, 3, 3), mode="continuous", optimizer=method, objective="improve")
+    start_session(workspace, AgentLimits(10, 3, 3), optimizer=method, objective="improve")
     with pytest.raises(RuntimeError, match="sealed evaluation requires"):
-        seal_submitted(workspace)
+        seal_research(workspace)
     execute_action(workspace, parse_action({"id": "finish", "type": "finish_research", "reason": "complete"}))
-    result = seal_submitted(workspace)
+    result = seal_research(workspace)
     assert result["baseline"]["sealed"] == "benchmark_complete"
     assert result["final"] == result["baseline"]
-    assert seal_submitted(workspace)["final"]["sealed"] == "already complete"
+    assert seal_research(workspace)["final"]["sealed"] == "already complete"
     assert [e["purpose"] for e in _evaluation_events(workspace, "0")] == ["genesis", "anchor"]

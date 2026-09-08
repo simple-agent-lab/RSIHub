@@ -52,14 +52,6 @@ def project(manifest: dict[str, Any], events: list[dict[str, Any]]) -> dict[str,
     return state
 
 
-def check_mode(kind: str, state: dict[str, Any]) -> None:
-    continuous = state.get("mode") == "continuous"
-    if kind in FIELDS and not continuous:
-        raise RuntimeError(f"{kind} requires a continuous research session")
-    if continuous and kind == "submit_champion":
-        raise RuntimeError("continuous research uses publish_best or finish_research, not submit_champion")
-
-
 def dispatch(workspace: Path, action: Any, state: dict[str, Any]) -> dict[str, Any]:
     args = action.arguments
     result = {"research_transition": action.kind}

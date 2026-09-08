@@ -71,7 +71,7 @@ class ControllerConfig:
             raise RuntimeError("controller arguments cannot contain NUL bytes")
 
 
-def launch_controller(workspace: Path, config: ControllerConfig, *, deferred_actions: bool = False) -> dict[str, Any]:
+def launch_controller(workspace: Path, config: ControllerConfig) -> dict[str, Any]:
     """Run one metered controller attempt and retain enough state to resume safely."""
 
     from .agent_handoff import recover_handoff
@@ -79,8 +79,6 @@ def launch_controller(workspace: Path, config: ControllerConfig, *, deferred_act
     workspace = workspace.resolve()
     recover_handoff(workspace)
     config.validate()
-    if config.sandbox is not None and not deferred_actions:
-        raise RuntimeError("isolated controllers require deferred action transport")
     root = workspace / _CONTROLLER_DIR
     root.mkdir(parents=True, exist_ok=True)
     with _controller_lock(root):
@@ -107,15 +105,14 @@ def launch_controller(workspace: Path, config: ControllerConfig, *, deferred_act
             raise RuntimeError(
                 f"controller attempt {status['pending_attempt']} was interrupted; inspect it and resolve before resuming"
             )
-        if status["session"]["status"] in {"submitted", "finished", "paused"}:
+        if status["session"]["status"] in {"finished", "paused"}:
             return status
         if status["session"]["status"] in {"running", "interrupted"}:
             raise RuntimeError(f"Agent Driven session is {status['session']['status']}; resolve it before launch")
         if status["exhausted_reasons"]:
             raise RuntimeError("controller launcher budget is exhausted: " + ", ".join(status["exhausted_reasons"]))
 
-        if status["session"].get("mode") == "continuous":
-            verify_optimizer(workspace, status["session"]["research"]["active_optimizer"])
+        verify_optimizer(workspace, status["session"]["research"]["active_optimizer"])
         attempt = status["attempts_used"] + 1
         attempt_dir = root / f"attempt-{attempt}"
         attempt_dir.mkdir()
@@ -140,15 +137,13 @@ def launch_controller(workspace: Path, config: ControllerConfig, *, deferred_act
         environment: dict[str, str] = {
             **os.environ,
             "EVOLVE_AGENT_WORKSPACE": str(workspace),
-            "EVOLVE_CONTROLLER_ACTION_MODE": "deferred" if deferred_actions else "synchronous",
+            "EVOLVE_CONTROLLER_ACTION_MODE": "deferred",
             "EVOLVE_CONTROLLER_ATTEMPT": str(attempt),
             "EVOLVE_CONTROLLER_ATTEMPT_DIR": str(attempt_dir),
             "EVOLVE_CONTROLLER_USAGE_RECEIPT": str(usage_path),
             "EVOLVE_CONTROLLER_FACTS": str(facts_path),
         }
-        environment.pop("EVOLVE_CONTROLLER_INPUT", None)
-        if input_path is not None:
-            environment["EVOLVE_CONTROLLER_INPUT"] = str(input_path)
+        environment["EVOLVE_CONTROLLER_INPUT"] = str(input_path)
         if config.sandbox is None:
             result = run_owned(
                 [config.command, *config.arguments],
@@ -181,21 +176,16 @@ def launch_controller(workspace: Path, config: ControllerConfig, *, deferred_act
         usage = None
         try:
             usage = _read_usage(usage_path)
-            if (
-                config.limits.max_cost_usd is not None
-                or config.limits.max_total_cost_usd is not None
-                or status["session"].get("mode") == "continuous"
-            ) and usage["cost_usd"] is None:
-                raise RuntimeError("controller usage cost_usd is required by the configured dollar budget")
+            if usage["cost_usd"] is None:
+                raise RuntimeError("controller usage cost_usd is required before research can continue")
         except Exception as exc:
             usage_error = str(exc)
         else:
             usage_error = None
-        if input_path is not None:
-            try:
-                validate_load(input_path, attempt_dir / "method-load.json")
-            except RuntimeError as exc:
-                usage_error = str(exc)
+        try:
+            validate_load(input_path, attempt_dir / "method-load.json")
+        except RuntimeError as exc:
+            usage_error = str(exc)
         if config.sandbox is not None and result.returncode == 0 and not result.timed_out and usage_error is None:
             from .agent_isolation import accept_isolated_return
 
@@ -300,9 +290,7 @@ def _status(workspace: Path, manifest: dict[str, Any]) -> dict[str, Any]:
         exhausted.append("controller_tokens")
     if limits.max_cost_usd is not None and controller_cost is not None and controller_cost >= limits.max_cost_usd:
         exhausted.append("controller_cost_usd")
-    if (
-        limits.max_cost_usd is not None or limits.max_total_cost_usd is not None or session.get("mode") == "continuous"
-    ) and unpriced_attempts:
+    if unpriced_attempts:
         exhausted.append("unpriced_controller_cost")
     if limits.max_wall_s is not None and controller_wall >= limits.max_wall_s:
         exhausted.append("controller_wall_s")

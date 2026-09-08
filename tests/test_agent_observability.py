@@ -15,9 +15,9 @@ def test_recovered_handoff_remains_visible_after_submission(tmp_path):
     assert session_status(w)["health"]["unresolved"][0]["kind"] == "handoff_ack_pending"
     drain_action(w)
     drain_action(w)
-    execute_action(w, parse_action({"id": "finish", "type": "submit_champion", "genid": "0"}))
+    execute_action(w, parse_action({"id": "finish", "type": "finish_research", "reason": "completed"}))
     state = session_status(w)
-    assert state["status"] == "submitted"
+    assert state["status"] == "finished"
     assert state["health"]["status"] == "incidents_recorded"
     assert state["health"]["incident_count"] == 1
     assert state["health"]["incidents"][0]["recovery"] == "terminal_receipt_reused"

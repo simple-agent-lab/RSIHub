@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from conftest import research_method
 from test_agent_launcher import _session
 
 from evolve.agent_driver import execute_action, parse_action
@@ -43,18 +44,20 @@ def test_two_handoffs_progress_without_model_polling(tmp_path: Path) -> None:
 from pathlib import Path
 from evolve.agent_driver import parse_action
 from evolve.agent_queue import defer_action
+method=json.loads(Path(os.environ['EVOLVE_CONTROLLER_INPUT']).read_text())
+Path(os.environ['EVOLVE_CONTROLLER_ATTEMPT_DIR'],'method-load.json').write_text(json.dumps(method['optimizer']))
 w=Path(os.environ['EVOLVE_AGENT_WORKSPACE'])
 n=int(os.environ['EVOLVE_CONTROLLER_ATTEMPT'])
 if n<3:
  payload={'id':f'work-{n}','type':'observe','evidence':['runs/gen-0/eval'],'hypothesis':f'cycle{n}'}
 else:
- payload={'id':'submit','type':'submit_champion','genid':'0'}
+ payload={'id':'submit','type':'finish_research','reason':'completed'}
 defer_action(w,parse_action(payload))
 Path(os.environ['EVOLVE_CONTROLLER_USAGE_RECEIPT']).write_text(json.dumps({'total_tokens':1,'cost_usd':0}))
 """)
     config = ControllerConfig(sys.executable, (str(script),), ControllerLimits(3, max_tokens=10))
     result = drive_controller(w, config)
-    assert result["status"] == "submitted"
+    assert result["status"] == "finished"
     assert result["evaluations_used"] == 0
     assert result["objective_completion"] == "not_assessed"
     events = [json.loads(x) for x in (w / "runs/agent-driven/actions.jsonl").read_text().splitlines()]
@@ -92,17 +95,19 @@ def test_two_candidate_cycles_complete_without_chat(tmp_path: Path, monkeypatch)
     _certify_baseline(w, home)
     monkeypatch.setenv("EVAL_STUB", "1")
     monkeypatch.setenv("EVOLVE_HOME", str(home))
-    start_session(w, AgentLimits(30, 5, 2))
+    start_session(w, AgentLimits(30, 5, 2), optimizer=research_method(w), objective="test research")
     script = tmp_path / "decide.py"
     script.write_text("""import json,os
 from pathlib import Path
 from evolve.agent_driver import parse_action
 from evolve.agent_queue import defer_action
+method=json.loads(Path(os.environ['EVOLVE_CONTROLLER_INPUT']).read_text())
+Path(os.environ['EVOLVE_CONTROLLER_ATTEMPT_DIR'],'method-load.json').write_text(json.dumps(method['optimizer']))
 w=Path(os.environ['EVOLVE_AGENT_WORKSPACE'])
 n=int(os.environ['EVOLVE_CONTROLLER_ATTEMPT'])-1
 gen=str(n//5+1); step=n%5
 if n==10:
- payload={'id':'submit','type':'submit_champion','genid':'1','stop_reason':'completed'}
+ payload={'id':'submit','type':'finish_research','reason':'completed'}
 else:
  kind=['fork','operator','commit','evaluate','finalize'][step]
  payload={'id':f'{gen}-{step}','type':kind,'genid':gen}
@@ -117,7 +122,7 @@ Path(os.environ['EVOLVE_CONTROLLER_USAGE_RECEIPT']).write_text(json.dumps({'tota
     result = drive_controller(w, ControllerConfig(sys.executable, (str(script),), ControllerLimits(12, max_tokens=20)))
     assert result["evaluations_used"] == 2
     assert result["champion"]["genid"] == "1"
-    assert result["stop_reason"] == "completed"
+    assert result["research"]["finish"]["reason"] == "completed"
     assert (w / "runs/agent-driven/progression/status.json").exists()
 
 
@@ -141,16 +146,18 @@ def test_resume_uses_saved_configuration_and_cumulative_attempts(tmp_path: Path)
 from pathlib import Path
 from evolve.agent_driver import parse_action
 from evolve.agent_queue import defer_action
+method=json.loads(Path(os.environ['EVOLVE_CONTROLLER_INPUT']).read_text())
+Path(os.environ['EVOLVE_CONTROLLER_ATTEMPT_DIR'],'method-load.json').write_text(json.dumps(method['optimizer']))
 w=Path(os.environ['EVOLVE_AGENT_WORKSPACE'])
 if int(os.environ['EVOLVE_CONTROLLER_ATTEMPT']) == 2:
- defer_action(w,parse_action({'id':'final','type':'submit_champion','genid':'0'}))
+ defer_action(w,parse_action({'id':'final','type':'finish_research','reason':'completed'}))
 Path(os.environ['EVOLVE_CONTROLLER_USAGE_RECEIPT']).write_text(json.dumps({'total_tokens':1,'cost_usd':0}))
 """)
     config = ControllerConfig(sys.executable, (str(script),), ControllerLimits(2, max_tokens=10))
     with pytest.raises(RuntimeError, match="without a deferred action"):
         drive_controller(w, config)
     result = resume_controller(w)
-    assert result["status"] == "submitted"
+    assert result["status"] == "finished"
     from evolve.agent_launcher import controller_status
 
     assert controller_status(w)["attempts_used"] == 2
@@ -173,14 +180,16 @@ def test_budget_exhaustion_submits_best_without_queued_work(tmp_path, limits, re
 from pathlib import Path
 from evolve.agent_driver import parse_action
 from evolve.agent_queue import defer_action
+method=json.loads(Path(os.environ['EVOLVE_CONTROLLER_INPUT']).read_text())
+Path(os.environ['EVOLVE_CONTROLLER_ATTEMPT_DIR'],'method-load.json').write_text(json.dumps(method['optimizer']))
 w=Path(os.environ['EVOLVE_AGENT_WORKSPACE'])
 defer_action(w,parse_action({'id':'must-not-run','type':'fork','genid':'1','parent':'0'}))
 Path(os.environ['EVOLVE_CONTROLLER_USAGE_RECEIPT']).write_text(json.dumps({'total_tokens':10,'cost_usd':.25}))
 """)
     config = ControllerConfig(sys.executable, (str(script),), limits)
     result = drive_controller(w, config)
-    assert result["status"] == "submitted"
-    assert result["stop_reason"] == "budget"
+    assert result["status"] == "finished"
+    assert result["research"]["finish"]["reason"] == "budget"
     assert result["champion"]["genid"] == "0"
     assert reason in result["budget_exhausted_reasons"]
     assert result["evaluations_used"] == 0

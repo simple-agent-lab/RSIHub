@@ -51,7 +51,6 @@ _ACTION_FIELDS = {
     "commit": ({"parent", "genid"}, set()),
     "evaluate": ({"genid"}, set()),
     "finalize": ({"genid"}, {"parent"}),
-    "submit_champion": ({"genid"}, {"stop_reason"}),
 }
 
 
@@ -169,18 +168,13 @@ def start_session(
     limits: AgentLimits,
     *,
     require_clean_start: bool = False,
-    mode: str = "batch",
-    optimizer: Path | None = None,
-    objective: str = "",
+    optimizer: Path,
+    objective: str,
 ) -> dict[str, Any]:
     workspace = workspace.resolve()
     limits.validate()
-    if mode not in {"batch", "continuous"}:
-        raise RuntimeError("mode must be batch or continuous")
-    if mode == "continuous" and (optimizer is None or not objective.strip()):
-        raise RuntimeError("continuous research requires optimizer and objective")
-    if mode == "batch" and (optimizer is not None or objective):
-        raise RuntimeError("optimizer and objective require continuous mode")
+    if not objective.strip():
+        raise RuntimeError("research requires a non-empty objective")
     champion = best_row(workspace)
     if champion is None:
         raise RuntimeError("Agent Driven mode requires a certified valid parent; run evolve agent prepare first")
@@ -202,8 +196,9 @@ def start_session(
         manifest_path = root / "manifest.json"
         if manifest_path.exists():
             manifest = _read_json_object(manifest_path)
-            if manifest.get("mode", "batch") != mode or (mode == "continuous" and manifest["objective"] != objective):
-                raise RuntimeError("session already exists with a different research mode or objective")
+            _require_research_manifest(manifest)
+            if manifest["objective"] != objective:
+                raise RuntimeError("session already exists with a different research objective")
             recorded_limits = manifest.get("limits")
             if isinstance(recorded_limits, dict):
                 recorded_limits = {"max_cost_usd": None, "max_wall_s": None, **recorded_limits}
@@ -230,17 +225,14 @@ def start_session(
             "require_clean_start": require_clean_start,
             "limits": asdict(limits),
         }
-        if mode == "continuous":
-            assert optimizer is not None
-            frozen = freeze_optimizer(workspace, optimizer)
-            manifest.update(
-                schema_version=2,
-                mode=mode,
-                objective=objective,
-                initial_optimizer={**frozen, "activation_id": "initial"},
-            )
-            (root / "notes").mkdir(exist_ok=True)
-            (root / "optimizer/drafts").mkdir(exist_ok=True)
+        frozen = freeze_optimizer(workspace, optimizer)
+        manifest.update(
+            schema_version=2,
+            objective=objective,
+            initial_optimizer={**frozen, "activation_id": "initial"},
+        )
+        (root / "notes").mkdir(exist_ok=True)
+        (root / "optimizer/drafts").mkdir(exist_ok=True)
         _atomic_json(manifest_path, manifest)
         _atomic_text(root / "ACTIVE", f"{manifest['session_id']}\n")
     return session_status(workspace)
@@ -275,6 +267,7 @@ def execute_action(workspace: Path, action: AgentAction) -> dict[str, Any]:
     with _session_lock(root):
         assert_handoff_complete(workspace)
         manifest = _read_json_object(root / "manifest.json")
+        _require_research_manifest(manifest)
         events = _read_events(root / "actions.jsonl")
         duplicate = _terminal_event(events, action.action_id)
         if duplicate is not None:
@@ -287,8 +280,8 @@ def execute_action(workspace: Path, action: AgentAction) -> dict[str, Any]:
             raise RuntimeError(
                 f"Agent Driven session has interrupted action {pending['action_id']}; resolve it before continuing"
             )
-        if _submitted_event(events) is not None:
-            raise RuntimeError("Agent Driven session is submitted; it cannot accept another action")
+        if agent_research.project(manifest, events)["lifecycle"] == "finished":
+            raise RuntimeError("research is finished; it cannot accept another action")
         _assert_workspace_integrity(workspace, manifest, events)
         state = _derive_status(workspace, manifest, events)
         if state["status"] not in {"active", "exhausted"} and not (
@@ -296,8 +289,7 @@ def execute_action(workspace: Path, action: AgentAction) -> dict[str, Any]:
         ):
             raise RuntimeError(f"Agent Driven session is {state['status']}; it cannot accept another action")
         limits = AgentLimits(**manifest["limits"])
-        agent_research.check_mode(action.kind, state)
-        if state["status"] == "exhausted" and action.kind not in {"submit_champion", "finish_research"}:
+        if state["status"] == "exhausted" and action.kind != "finish_research":
             reasons = ", ".join(state["exhausted_reasons"])
             raise RuntimeError(f"Agent Driven action budget is exhausted: {reasons}")
         _assert_sub_budget(action, state, limits)
@@ -340,7 +332,7 @@ def execute_action(workspace: Path, action: AgentAction) -> dict[str, Any]:
             "workspace_after": _workspace_fingerprint(workspace),
         }
         _append_event(root / "actions.jsonl", completed)
-        if action.kind in {"submit_champion", "finish_research"}:
+        if action.kind == "finish_research":
             (root / "ACTIVE").unlink(missing_ok=True)
         return completed
 
@@ -382,25 +374,22 @@ def session_status(workspace: Path) -> dict[str, Any]:
     root = workspace / SESSION_DIR
     manifest = _read_json_object(root / "manifest.json")
     events = _read_events(root / "actions.jsonl")
-    finished = (
-        manifest.get("mode") == "continuous" and agent_research.project(manifest, events)["lifecycle"] == "finished"
-    )
-    if not finished and _submitted_event(events) is None and _pending_action(events) is None:
+    _require_research_manifest(manifest)
+    finished = agent_research.project(manifest, events)["lifecycle"] == "finished"
+    if not finished and _pending_action(events) is None:
         _assert_workspace_integrity(workspace, manifest, events)
     return _derive_status(workspace, manifest, events)
 
 
-def seal_submitted(workspace: Path) -> dict[str, Any]:
+def seal_research(workspace: Path) -> dict[str, Any]:
     workspace = workspace.resolve()
     state = session_status(workspace)
-    if state["status"] not in {"submitted", "finished"}:
-        raise RuntimeError("sealed evaluation requires a submitted Agent Driven champion")
-    submitted = (
-        state["research"]["finish"]["champion"] if state.get("mode") == "continuous" else state["submitted_champion"]
-    )
-    if not isinstance(submitted, dict) or not isinstance(submitted.get("genid"), str):
-        raise RuntimeError("Agent Driven submission receipt has no champion generation")
-    genid = submitted["genid"]
+    if state["status"] != "finished":
+        raise RuntimeError("sealed evaluation requires finished research")
+    champion = state["research"]["finish"]["champion"]
+    if not isinstance(champion, dict) or not isinstance(champion.get("genid"), str):
+        raise RuntimeError("research finish receipt has no champion generation")
+    genid = champion["genid"]
     manifest = load_manifest(workspace / "evaluator" / "splits.json")
     if not selected_task_names(manifest, "sealed"):
         return {"genid": genid, "sealed": "not_configured"}
@@ -417,27 +406,23 @@ def seal_submitted(workspace: Path) -> dict[str, Any]:
             "wall_s": record.wall_s,
         }
 
-    if state.get("mode") == "continuous":
-        session = _read_json_object(workspace / SESSION_DIR / "manifest.json")
-        baseline = evaluate(session["baseline"]["genid"])
-        if baseline["sealed"] not in {"already complete", "benchmark_complete"}:
-            return {"baseline": baseline, "final": {"genid": genid, "sealed": "not_started"}}
-        final = baseline if session["baseline"]["genid"] == genid else evaluate(genid)
-        return {"baseline": baseline, "final": final}
-    return evaluate(genid)
+    session = _read_json_object(workspace / SESSION_DIR / "manifest.json")
+    baseline = evaluate(session["baseline"]["genid"])
+    if baseline["sealed"] not in {"already complete", "benchmark_complete"}:
+        return {"baseline": baseline, "final": {"genid": genid, "sealed": "not_started"}}
+    final = baseline if session["baseline"]["genid"] == genid else evaluate(genid)
+    return {"baseline": baseline, "final": final}
 
 
 def _derive_status(workspace: Path, manifest: dict[str, Any], events: list[dict[str, Any]]) -> dict[str, Any]:
     from .agent_observability import session_health
 
+    _require_research_manifest(manifest)
     started = [event for event in events if event.get("phase") == "started"]
-    budgeted = [
-        event for event in started if event.get("action", {}).get("type") not in {"submit_champion", "finish_research"}
-    ]
+    budgeted = [event for event in started if event.get("action", {}).get("type") != "finish_research"]
     operator_calls = [event for event in started if event.get("action", {}).get("type") == "operator"]
     evaluations = [event for event in started if event.get("action", {}).get("type") == "evaluate"]
     pending = _pending_action(events)
-    submitted = _submitted_event(events)
     limits = AgentLimits(**manifest["limits"])
     observed_cost = round(
         sum(float(event.get("cost_usd", 0)) for event in events if event.get("phase") in {"completed", "failed"}),
@@ -454,19 +439,11 @@ def _derive_status(workspace: Path, manifest: dict[str, Any], events: list[dict[
         exhausted_reasons.append("cost_usd")
     if limits.max_wall_s is not None and elapsed_s >= limits.max_wall_s:
         exhausted_reasons.append("wall_s")
-    status = (
-        "submitted"
-        if submitted
-        else "running"
-        if pending and _session_is_locked(workspace)
-        else "interrupted"
-        if pending
-        else "active"
-    )
+    status = "running" if pending and _session_is_locked(workspace) else "interrupted" if pending else "active"
     if status == "active" and exhausted_reasons:
         status = "exhausted"
-    research = agent_research.project(manifest, events) if manifest.get("mode") == "continuous" else None
-    if research and research["lifecycle"] != "active" and pending is None:
+    research = agent_research.project(manifest, events)
+    if research["lifecycle"] != "active" and pending is None:
         status = research["lifecycle"]
     champion = best_row(workspace)
     occupied_generations = sorted(
@@ -475,7 +452,6 @@ def _derive_status(workspace: Path, manifest: dict[str, Any], events: list[dict[
     )
     return {
         "schema_version": manifest.get("schema_version", SCHEMA_VERSION),
-        "mode": manifest.get("mode", "batch"),
         "research": research,
         "session_id": manifest["session_id"],
         "status": status,
@@ -499,7 +475,6 @@ def _derive_status(workspace: Path, manifest: dict[str, Any], events: list[dict[
         "unpriced_candidate_runs": unpriced,
         "health": session_health(workspace, events, status),
         "pending_action": pending.get("action_id") if pending else None,
-        "submitted_champion": submitted.get("result") if submitted else None,
         "receipt_path": str((workspace / SESSION_DIR / "actions.jsonl").resolve()),
     }
 
@@ -587,15 +562,6 @@ def _dispatch(workspace: Path, action: AgentAction, manifest: dict[str, Any]) ->
             _agent_session=True,
         )
         return {"genid": args["genid"], "finalized": changed}, 0
-    if action.kind == "submit_champion":
-        matches = [row for row in valid_parent_rows(workspace) if str(row.get("genid")) == args["genid"]]
-        if not matches:
-            raise RuntimeError(f"gen/{args['genid']} is not a certified valid parent")
-        summary = _candidate_summary(matches[-1])
-        assert summary is not None
-        if "stop_reason" in args:
-            summary["stop_reason"] = args["stop_reason"]
-        return summary, 0
     raise AssertionError(f"unhandled action: {action.kind}")
 
 
@@ -659,9 +625,7 @@ def _validate_action_arguments(kind: str, args: dict[str, Any]) -> None:
             raise RuntimeError("Agent Driven operator config overrides are disabled; freeze them in the recipe")
         if "timeout_s" in args:
             raise RuntimeError("Agent Driven operator timeout overrides are disabled; freeze them in the recipe")
-    if kind == "submit_champion" and "stop_reason" in args:
-        if args["stop_reason"] not in ("completed", "budget", "infrastructure", "no_improvement", "cancelled"):
-            raise RuntimeError("invalid champion stop_reason")
+
     if kind == "observe":
         evidence = args["evidence"]
         if not isinstance(evidence, list) or not evidence or len(evidence) > 20:
@@ -760,26 +724,6 @@ def _pending_action(events: list[dict[str, Any]]) -> dict[str, Any] | None:
         ),
         None,
     )
-
-
-def _submitted_event(events: list[dict[str, Any]]) -> dict[str, Any] | None:
-    return next(
-        (
-            event
-            for event in reversed(events)
-            if event.get("phase") == "completed"
-            and _started_kind(events, str(event.get("action_id"))) == "submit_champion"
-        ),
-        None,
-    )
-
-
-def _started_kind(events: list[dict[str, Any]], action_id: str) -> str | None:
-    for event in events:
-        if event.get("phase") == "started" and event.get("action_id") == action_id:
-            action = event.get("action")
-            return str(action.get("type")) if isinstance(action, dict) else None
-    return None
 
 
 def _read_events(path: Path) -> list[dict[str, Any]]:
@@ -924,3 +868,8 @@ def _observed_action_cost(workspace: Path, action: AgentAction) -> float:
         row = rows_by_genid(workspace).get(action.arguments["genid"], {})
         return _number(row.get("cost_usd"))
     return 0
+
+
+def _require_research_manifest(manifest: dict[str, Any]) -> None:
+    if manifest.get("schema_version") != 2 or not manifest.get("objective") or not manifest.get("initial_optimizer"):
+        raise RuntimeError("unsupported Agent Driven session; initialize a fresh research workspace")

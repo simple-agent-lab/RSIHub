@@ -29,6 +29,9 @@ non-selectable `anchor`, is stored as auxiliary evidence, and is excluded from
 the mutation feedback projection. Generation one cannot begin until both
 required evaluations complete. `anchor.final` controls the final anchor only.
 
+Agent Driven has one continuous research lifecycle: publish a certified best
+without stopping, or explicitly finish research. There is no batch mode.
+
 The separate research workflow begins with `evolve agent prepare`: certify the
 primary development baseline without reading sealed data, then start the agent
 session. Continuous research publishes intermediate candidates without sealed

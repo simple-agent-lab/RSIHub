@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import subprocess
@@ -24,8 +25,26 @@ def test_codex_controller_wrapper_records_tokens_and_resumes_session(tmp_path: P
         "print(json.dumps({'type': 'turn.completed', 'usage': {'input_tokens': 7, 'output_tokens': 3}}))\n"
     )
     fake.chmod(0o755)
-    prompt = tmp_path / "prompt.md"
-    prompt.write_text("control the experiment\n")
+    bundle = tmp_path / "method"
+    bundle.mkdir()
+    content = "control the experiment\n"
+    (bundle / "instructions.md").write_text(content)
+    method = {
+        "activation_id": "initial",
+        "digest": "fixture",
+        "files": {"instructions.md": hashlib.sha256(content.encode()).hexdigest()},
+    }
+    inputs = controller / "input.json"
+    inputs.write_text(
+        json.dumps(
+            {
+                "optimizer": method,
+                "optimizer_path": str(bundle),
+                "objective": "learn",
+                "research_workspace": str(workspace / "notes"),
+            }
+        )
+    )
 
     for attempt in (1, 2):
         attempt_dir = controller / f"attempt-{attempt}"
@@ -35,8 +54,6 @@ def test_codex_controller_wrapper_records_tokens_and_resumes_session(tmp_path: P
             [
                 sys.executable,
                 str(ROOT / "scripts/codex_agent_controller.py"),
-                "--prompt",
-                str(prompt),
                 "--codex",
                 str(fake),
             ],
@@ -48,6 +65,7 @@ def test_codex_controller_wrapper_records_tokens_and_resumes_session(tmp_path: P
                 "EVOLVE_CONTROLLER_ATTEMPT_DIR": str(attempt_dir),
                 "EVOLVE_CONTROLLER_USAGE_RECEIPT": str(usage),
                 "FAKE_ARGS": str(attempt_dir / "args.json"),
+                "EVOLVE_CONTROLLER_INPUT": str(inputs),
             },
             text=True,
             capture_output=True,
@@ -56,7 +74,7 @@ def test_codex_controller_wrapper_records_tokens_and_resumes_session(tmp_path: P
         assert result.returncode == 0, result.stderr
         assert json.loads(usage.read_text()) == {"total_tokens": 10, "cost_usd": None}
 
-    assert (controller / "codex-session-id").read_text() == "session-123\n"
+    assert (controller / "contexts/initial/codex-session-id").read_text() == "session-123\n"
     second_events = (controller / "attempt-2/codex-events.jsonl").read_text()
     assert "turn.completed" in second_events
     second_args = json.loads((controller / "attempt-2/args.json").read_text())

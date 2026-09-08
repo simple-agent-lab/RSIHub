@@ -9,8 +9,8 @@ Driven describes who controls the loop, not which operators are installed.
 RSI Hub owns candidate identity, evaluator execution, stamps, lineage, and the
 action/call boundary. The outer Agent owns the search policy:
 it may inspect evidence, choose a parent, invoke or repeat direct operators,
-edit the target and permitted process files, abandon a branch, or submit a
-champion.
+edit the target and permitted process files, abandon a branch, publish a
+champion, and continue researching until it explicitly finishes.
 
 The Agent may adapt the sequence after every observation. Do not turn the
 following into a required stage list:
@@ -28,7 +28,8 @@ Start only from a certified valid parent, then use the durable action surface:
 
 ```bash
 ./evolve agent prepare .
-./evolve agent start . --max-actions 20 --max-operator-calls 10 --max-evaluations 3 \
+./evolve agent start . --optimizer /path/to/method --objective "Improve the candidate" \
+  --max-actions 20 --max-operator-calls 10 --max-evaluations 3 \
   --max-cost-usd 10 --max-wall-s 3600 --require-clean-start
 ./evolve agent schema
 ./evolve agent status .
@@ -82,20 +83,21 @@ The launcher executes an argument vector without a shell and exports
 `EVOLVE_AGENT_WORKSPACE`, `EVOLVE_CONTROLLER_ATTEMPT`,
 `EVOLVE_CONTROLLER_ATTEMPT_DIR`, and `EVOLVE_CONTROLLER_USAGE_RECEIPT`. The
 last path must receive a JSON object containing non-negative `total_tokens` and
-numeric or null `cost_usd`. Null is permitted only without a controller/total
-dollar cap and is reported as unpriced. Each invocation runs one controller attempt; repeat the exact
-command to resume. Inspect `agent controller-status` first. An interrupted
+numeric `cost_usd`. Missing or null cost is unpriced and blocks further calls.
+Write `method-load.json` matching the optimizer in `EVOLVE_CONTROLLER_INPUT`.
+The launcher runs successive decisions and deferred actions until paused, finished,
+or blocked; repeat the exact command to resume. Inspect `agent controller-status` first. An interrupted
 controller attempt requires explicit inspection and
 `agent resolve-controller-interrupted`, including observed or conservative
 upper-bound token usage, just as an interrupted action does.
 A rejected or invalid action consumes budget; do not silently replace it with
 a fresh attempt.
 
-Submit a champion when another action lacks a concrete evidence-backed reason,
+Use `finish_research` when another action lacks a concrete evidence-backed reason,
 the budget is exhausted, or the experiment's stopping rule fires. The host,
 not the Agent, performs any final sealed evaluation after the champion and
 analysis rules are frozen. Sealed results never feed another search action.
-The host may then run `./evolve agent seal-submitted . --confirm`; this command
+The host may then run `./evolve agent seal-research . --confirm`; this command
 is deliberately absent from the controller action schema.
 
 The host-shell controller is trusted. Tracked-tree and archive integrity checks
@@ -131,16 +133,15 @@ use, not evidence of benefit.
 When `EVOLVE_CONTROLLER_ACTION_MODE=deferred`, make one decision, request one
 `agent act --defer` action, and end the controller turn. CLI actions in this mode
 are automatically deferred. Do not poll the queued request: the host's
-`agent run-controller --continuous` loop executes it after you exit and invokes
+`agent run-controller` loop executes it after you exit and invokes
 the next decision with the durable result. Inspect that result before choosing
 another action. The shared attempt budget counts decisions, not generations.
 
 A pending or failed operation is not permission to start a replacement. Inspect
 its evidence and use explicit interruption/handoff resolution before recovery.
-Do not edit queue, controller, archive, or evaluation receipts. On submission,
-include `stop_reason` (`completed`, `budget`, `infrastructure`, `no_improvement`,
-or `cancelled`) so retaining a valid champion is distinguishable from satisfying
-the requested experiment. A valid baseline with zero new evaluations does not
+Do not edit queue, controller, archive, or evaluation receipts. On finishing,
+include an explicit `reason` so retaining a valid champion is distinguishable
+from satisfying the requested experiment. A valid baseline with zero new evaluations does not
 establish that a requested multi-round experiment completed.
 
 ### Time pressure is execution evidence
@@ -168,14 +169,13 @@ same independent comparison.
 
 ## Continuous research sessions
 
-For a new persistent research task, start with `--mode continuous`,
-`--optimizer <method-directory>`, and `--objective <goal>`. The method must
+Start every research task with `--optimizer <method-directory>` and
+`--objective <goal>`. The method must
 contain `instructions.md`; optional tools and `resume.md` are snapshotted
-with it. Use `agent schema --mode continuous` for the action contract.
+with it. Use `agent schema` for the action contract.
 
-In this mode, `publish_best` publishes without ending research; use
+`publish_best` publishes without ending research; use
 `finish_research` to finish or `pause_research` with a resume condition.
-`submit_champion` remains an original-mode action and is rejected here.
 Modify a copy of the method in `runs/agent-driven/optimizer/drafts/`, then
 request `adopt_optimizer` with `expected_digest` and a reason. Next launch
 uses that snapshot in a fresh model context, while all fees stay cumulative.

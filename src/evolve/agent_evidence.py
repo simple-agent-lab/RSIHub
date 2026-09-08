@@ -50,8 +50,7 @@ def facts_bytes(workspace: Path) -> bytes:
         if e.get("phase") == "completed" and kinds.get(e["action_id"]) == "evaluate"
     }
     facts["health"] = state["health"]
-    if state.get("mode") == "continuous":
-        facts["research"] = state["research"]
-        facts["research_workspace"] = "runs/agent-driven/notes"
+    facts["research"] = state["research"]
+    facts["research_workspace"] = "runs/agent-driven/notes"
     facts["failed_actions"] = [e["action_id"] for e in events if e.get("phase") == "failed"]
     return (json.dumps(facts, sort_keys=True, allow_nan=False) + "\n").encode()

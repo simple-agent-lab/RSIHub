@@ -4,7 +4,7 @@ import shutil
 from pathlib import Path
 
 import pytest
-from conftest import git, init_fixture_workspace, init_workspace, run_evolve
+from conftest import git, init_fixture_workspace, init_workspace, research_method, run_evolve
 
 from evolve.agent_driver import (
     AgentLimits,
@@ -14,7 +14,7 @@ from evolve.agent_driver import (
     execute_action,
     parse_action,
     resolve_interrupted,
-    seal_submitted,
+    seal_research,
     session_status,
     start_session,
 )
@@ -105,12 +105,13 @@ def test_agent_session_requires_certified_parent_and_never_exposes_seal(tmp_path
     workspace, _evolve_home = init_workspace(tmp_path)
 
     with pytest.raises(RuntimeError, match="certified valid parent"):
-        start_session(workspace, AgentLimits(3, 1, 1))
+        start_session(workspace, AgentLimits(3, 1, 1), optimizer=research_method(workspace), objective="test research")
     with pytest.raises(RuntimeError, match="unknown action.type"):
         parse_action({"id": "forbidden", "type": "sealed"})
     schema = run_evolve("agent", "schema")
     assert schema.returncode == 0, schema.stderr
-    assert "submit_champion" in json.loads(schema.stdout)
+    assert "finish_research" in json.loads(schema.stdout)
+    assert "submit_champion" not in json.loads(schema.stdout)
     assert "sealed" not in json.loads(schema.stdout)
 
 
@@ -137,7 +138,7 @@ def test_agent_session_refuses_workspace_with_sealed_evidence(tmp_path: Path) ->
     assert sealed.returncode == 0, sealed.stderr
 
     with pytest.raises(RuntimeError, match="before sealed evaluation exists"):
-        start_session(workspace, AgentLimits(3, 1, 1))
+        start_session(workspace, AgentLimits(3, 1, 1), optimizer=research_method(workspace), objective="test research")
 
 
 def test_agent_clean_start_refuses_prior_generation_history(tmp_path: Path) -> None:
@@ -147,7 +148,13 @@ def test_agent_clean_start_refuses_prior_generation_history(tmp_path: Path) -> N
         stream.write(json.dumps({"genid": "1", "tag": "gen/1", "parent": "0", "mutated": []}) + "\n")
 
     with pytest.raises(RuntimeError, match="clean start has occupied generations: 1"):
-        start_session(workspace, AgentLimits(3, 1, 1), require_clean_start=True)
+        start_session(
+            workspace,
+            AgentLimits(3, 1, 1),
+            require_clean_start=True,
+            optimizer=research_method(workspace),
+            objective="test research",
+        )
 
 
 def test_agent_session_enforces_budget_receipts_and_driver_exclusion(
@@ -155,7 +162,7 @@ def test_agent_session_enforces_budget_receipts_and_driver_exclusion(
 ) -> None:
     workspace, evolve_home = init_workspace(tmp_path)
     _certify_baseline(workspace, evolve_home)
-    start_session(workspace, AgentLimits(1, 0, 0))
+    start_session(workspace, AgentLimits(1, 0, 0), optimizer=research_method(workspace), objective="test research")
     bypass = run_evolve(
         "eval",
         str(workspace),
@@ -197,15 +204,15 @@ def test_agent_session_enforces_budget_receipts_and_driver_exclusion(
     assert competing.returncode == 1
     assert "Agent Driven session owns this workspace" in competing.stderr
 
-    submitted = execute_action(workspace, _action("submit", "submit_champion", genid="0"))
-    assert submitted["result"]["genid"] == "0"
-    assert session_status(workspace)["status"] == "submitted"
+    submitted = execute_action(workspace, _action("submit", "finish_research", reason="completed"))
+    assert submitted["result"]["champion"]["genid"] == "0"
+    assert session_status(workspace)["status"] == "finished"
     assert not (workspace / "runs/agent-driven/ACTIVE").exists()
     monkeypatch.setenv("EVAL_STUB", "1")
     monkeypatch.setenv("EVOLVE_HOME", str(evolve_home))
-    sealed = seal_submitted(workspace)
-    assert sealed["genid"] == "0"
-    assert sealed["sealed"] == "benchmark_complete"
+    sealed = seal_research(workspace)
+    assert sealed["baseline"]["genid"] == "0"
+    assert sealed["final"]["sealed"] == "benchmark_complete"
     with pytest.raises(RuntimeError, match="cannot accept another action"):
         execute_action(
             workspace,
@@ -228,10 +235,10 @@ def test_agent_seal_is_a_noop_when_sealed_split_is_empty(tmp_path: Path, monkeyp
     _certify_baseline(workspace, evolve_home)
     monkeypatch.setenv("EVAL_STUB", "1")
     monkeypatch.setenv("EVOLVE_HOME", str(evolve_home))
-    start_session(workspace, AgentLimits(1, 0, 0))
-    execute_action(workspace, _action("submit", "submit_champion", genid="0"))
+    start_session(workspace, AgentLimits(1, 0, 0), optimizer=research_method(workspace), objective="test research")
+    execute_action(workspace, _action("submit", "finish_research", reason="completed"))
 
-    assert seal_submitted(workspace) == {"genid": "0", "sealed": "not_configured"}
+    assert seal_research(workspace) == {"genid": "0", "sealed": "not_configured"}
     row = json.loads((workspace / "best_ever.json").read_text())
     assert not any(item.get("purpose") == "anchor" for item in row.get("evals", []))
 
@@ -239,7 +246,7 @@ def test_agent_seal_is_a_noop_when_sealed_split_is_empty(tmp_path: Path, monkeyp
 def test_agent_session_blocks_every_direct_orchestration_route(tmp_path: Path) -> None:
     workspace, evolve_home = init_workspace(tmp_path)
     _certify_baseline(workspace, evolve_home)
-    start_session(workspace, AgentLimits(3, 1, 1))
+    start_session(workspace, AgentLimits(3, 1, 1), optimizer=research_method(workspace), objective="test research")
     child = workspace / "runs/worktrees/gen-1"
     calls = [
         lambda: invoke_operator(workspace, "rollout", "1", parent="0", checkout=child),
@@ -257,7 +264,7 @@ def test_agent_session_blocks_every_direct_orchestration_route(tmp_path: Path) -
 def test_agent_session_surfaces_and_resolves_interrupted_action(tmp_path: Path) -> None:
     workspace, evolve_home = init_workspace(tmp_path)
     _certify_baseline(workspace, evolve_home)
-    start_session(workspace, AgentLimits(3, 1, 1))
+    start_session(workspace, AgentLimits(3, 1, 1), optimizer=research_method(workspace), objective="test research")
     receipt = workspace / "runs/agent-driven/actions.jsonl"
     receipt.write_text(
         json.dumps(
@@ -287,7 +294,7 @@ def test_agent_session_surfaces_and_resolves_interrupted_action(tmp_path: Path) 
 def test_agent_status_distinguishes_running_from_interrupted(tmp_path: Path) -> None:
     workspace, evolve_home = init_workspace(tmp_path)
     _certify_baseline(workspace, evolve_home)
-    start_session(workspace, AgentLimits(3, 1, 1))
+    start_session(workspace, AgentLimits(3, 1, 1), optimizer=research_method(workspace), objective="test research")
     receipt = workspace / "runs/agent-driven/actions.jsonl"
     receipt.write_text(
         json.dumps(
@@ -312,7 +319,12 @@ def test_agent_status_distinguishes_running_from_interrupted(tmp_path: Path) -> 
 def test_agent_interrupted_resolution_recovers_observed_operator_cost(tmp_path: Path) -> None:
     workspace, evolve_home = init_workspace(tmp_path)
     _certify_baseline(workspace, evolve_home)
-    start_session(workspace, AgentLimits(3, 1, 1, max_cost_usd=0.3))
+    start_session(
+        workspace,
+        AgentLimits(3, 1, 1, max_cost_usd=0.3),
+        optimizer=research_method(workspace),
+        objective="test research",
+    )
     receipt = workspace / "runs/agent-driven/actions.jsonl"
     receipt.write_text(
         json.dumps(
@@ -345,7 +357,7 @@ def test_agent_interrupted_resolution_recovers_observed_operator_cost(tmp_path: 
 def test_agent_detects_control_tree_and_archive_bypass(tmp_path: Path) -> None:
     workspace, evolve_home = init_workspace(tmp_path)
     _certify_baseline(workspace, evolve_home)
-    start_session(workspace, AgentLimits(3, 1, 1))
+    start_session(workspace, AgentLimits(3, 1, 1), optimizer=research_method(workspace), objective="test research")
     config = workspace / "evolve.yaml"
     original = config.read_text()
     config.write_text(original + "\n# controller bypass\n")
@@ -364,7 +376,9 @@ def test_agent_detects_control_tree_and_archive_bypass(tmp_path: Path) -> None:
 def test_agent_wall_budget_stops_new_actions(tmp_path: Path) -> None:
     workspace, evolve_home = init_workspace(tmp_path)
     _certify_baseline(workspace, evolve_home)
-    start_session(workspace, AgentLimits(3, 1, 1, max_wall_s=1))
+    start_session(
+        workspace, AgentLimits(3, 1, 1, max_wall_s=1), optimizer=research_method(workspace), objective="test research"
+    )
     manifest_path = workspace / "runs/agent-driven/manifest.json"
     manifest = json.loads(manifest_path.read_text())
     manifest["created_at"] = "2020-01-01T00:00:00+00:00"
@@ -382,7 +396,7 @@ def test_agent_session_rejects_candidate_owned_gate_and_record(tmp_path: Path) -
     evolve_home = tmp_path / "evolve-home"
     init_fixture_workspace(workspace, "hyperagents-smoke")
     _certify_baseline(workspace, evolve_home)
-    start_session(workspace, AgentLimits(3, 0, 0))
+    start_session(workspace, AgentLimits(3, 0, 0), optimizer=research_method(workspace), objective="test research")
     execute_action(workspace, _action("fork", "fork", parent="0", genid="1"))
     child = workspace / "runs/worktrees/gen-1"
     (child / "operators/gate.py").write_text("raise SystemExit(0)\n")
@@ -409,7 +423,7 @@ def test_agent_process_change_activates_only_when_candidate_is_parent(
     _certify_baseline(workspace, evolve_home)
     monkeypatch.setenv("EVAL_STUB", "1")
     monkeypatch.setenv("EVOLVE_HOME", str(evolve_home))
-    start_session(workspace, AgentLimits(12, 3, 2))
+    start_session(workspace, AgentLimits(12, 3, 2), optimizer=research_method(workspace), objective="test research")
 
     execute_action(workspace, _action("fork-1", "fork", parent="0", genid="1"))
     child = workspace / "runs/worktrees/gen-1"

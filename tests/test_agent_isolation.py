@@ -70,18 +70,17 @@ def test_isolated_symlink_receipt_is_not_read_as_host_data(tmp_path, monkeypatch
     monkeypatch.setattr("evolve.agent_isolation.run_sandbox", controller)
     config = ControllerConfig("true", (), ControllerLimits(2), SandboxConfig(IMAGE, 30))
     with pytest.raises(OSError):
-        launch_controller(workspace, config, deferred_actions=True)
+        launch_controller(workspace, config)
     assert not (workspace / "runs/agent-driven/controller/attempt-1/method-load.json").exists()
     assert controller_status(workspace)["pending_attempt"] == 1
     with pytest.raises(RuntimeError, match="reconcile usage"):
         drive_controller(workspace, config)
 
 
-def test_isolated_controller_requires_pinned_image_and_deferred_mode(tmp_path, monkeypatch):
+def test_isolated_controller_requires_pinned_image(monkeypatch):
     monkeypatch.setattr("evolve.runtime.sandbox.os.getuid", lambda: 1000)
     config = ControllerConfig("true", (), ControllerLimits(2), SandboxConfig("mutable-tag", 30))
     with pytest.raises(RuntimeError, match="immutable image"):
         config.validate()
     config = ControllerConfig("true", (), ControllerLimits(2), SandboxConfig(IMAGE, 30))
-    with pytest.raises(RuntimeError, match="deferred"):
-        launch_controller(tmp_path, config)
+    config.validate()

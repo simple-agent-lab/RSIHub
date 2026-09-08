@@ -17,7 +17,7 @@ def research(tmp_path):
     method = tmp_path / "method"
     method.mkdir()
     (method / "instructions.md").write_text("first method")
-    start_session(w, AgentLimits(30, 3, 3, max_cost_usd=10), mode="continuous", optimizer=method, objective="learn")
+    start_session(w, AgentLimits(30, 3, 3, max_cost_usd=10), optimizer=method, objective="learn")
     return w
 
 
@@ -116,9 +116,9 @@ def test_optimizer_rejects_escape_symlink_and_bad_python(tmp_path):
         freeze_optimizer(tmp_path, method)
 
 
-def test_mode_compatibility_and_snapshot_tampering(tmp_path):
+def test_removed_batch_action_and_snapshot_tampering(tmp_path):
     w = research(tmp_path)
-    with pytest.raises(RuntimeError, match="publish_best"):
+    with pytest.raises(RuntimeError, match="unknown action.type"):
         act(w, "old", "submit_champion", genid="0")
     state = session_status(w)
     method = state["research"]["active_optimizer"]
@@ -197,7 +197,7 @@ def test_unpriced_isolated_candidate_prevents_new_actions_and_model_calls(tmp_pa
 
 
 def test_continuous_acceptance_evaluates_initial_and_final_candidates(tmp_path, monkeypatch):
-    from evolve.agent_driver import seal_submitted
+    from evolve.agent_driver import seal_research
 
     w = research(tmp_path)
     act(w, "finish", "finish_research", reason="complete")
@@ -206,7 +206,46 @@ def test_continuous_acceptance_evaluates_initial_and_final_candidates(tmp_path, 
     monkeypatch.setattr("evolve.agent_driver.session_status", lambda _: state)
     seen = []
     monkeypatch.setattr("evolve.agent_driver.seal_agent_champion", lambda _, genid: seen.append(genid))
-    result = seal_submitted(w)
+    result = seal_research(w)
     assert seen == ["0", "1"]
     assert result["baseline"]["genid"] == "0"
     assert result["final"]["genid"] == "1"
+
+
+def test_old_batch_manifest_is_rejected_without_rewriting_history(tmp_path):
+    w = research(tmp_path)
+    root = w / "runs/agent-driven"
+    manifest = json.loads((root / "manifest.json").read_text())
+    manifest["schema_version"] = 1
+    manifest.pop("objective")
+    manifest.pop("initial_optimizer")
+    (root / "manifest.json").write_text(json.dumps(manifest))
+    before = (root / "manifest.json").read_bytes()
+    with pytest.raises(RuntimeError, match="fresh research workspace"):
+        session_status(w)
+    with pytest.raises(RuntimeError, match="fresh research workspace"):
+        act(w, "new", "finish_research", reason="completed")
+    assert (root / "manifest.json").read_bytes() == before
+    assert not (root / "actions.jsonl").exists()
+
+
+def test_research_cli_requires_method_and_has_one_schema(tmp_path):
+    from conftest import research_method
+
+    w, home = init_workspace(tmp_path)
+    env = {"EVAL_STUB": "1", "EVOLVE_HOME": str(home)}
+    assert run_evolve("agent", "prepare", str(w), env=env).returncode == 0
+    missing = run_evolve("agent", "start", str(w), env=env)
+    assert missing.returncode != 0
+    assert "--optimizer" in missing.stderr
+    result = run_evolve(
+        "agent", "start", str(w), "--optimizer", str(research_method(w)), "--objective", "learn", env=env
+    )
+    assert result.returncode == 0, result.stderr
+    state = json.loads(result.stdout)
+    assert state["research"]["objective"] == "learn"
+    assert "mode" not in state
+    schema = json.loads(run_evolve("agent", "schema").stdout)
+    assert "publish_best" in schema and "finish_research" in schema
+    assert "submit_champion" not in schema
+    assert run_evolve("agent", "schema", "--mode", "batch").returncode != 0

@@ -16,8 +16,6 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--isolated-input", type=Path)
     parser.add_argument("--isolated-output", type=Path, default=Path("/output"))
-    parser.add_argument("--prompt", type=Path)
-    parser.add_argument("--resume-prompt", type=Path)
     parser.add_argument("--codex", default="codex")
     parser.add_argument("--require-version", default="0.149.0")
     parser.add_argument("--codex-arg", action="append", default=[])
@@ -30,40 +28,32 @@ def main() -> None:
     usage_receipt = _required_path("EVOLVE_CONTROLLER_USAGE_RECEIPT")
     attempt = int(os.environ["EVOLVE_CONTROLLER_ATTEMPT"])
     _check_version(args.codex, args.require_version)
-    input_name = os.environ.get("EVOLVE_CONTROLLER_INPUT")
-    method = json.loads(Path(input_name).read_text()) if input_name else None
+    method = json.loads(_required_path("EVOLVE_CONTROLLER_INPUT").read_text())
     context = workspace if args.isolated_input is not None else attempt_dir.parent
-    if method:
-        context = context / "contexts" / method["optimizer"]["activation_id"]
-        context.mkdir(parents=True, exist_ok=True)
+    context = context / "contexts" / method["optimizer"]["activation_id"]
+    context.mkdir(parents=True, exist_ok=True)
     session_path = context / "codex-session-id"
     session_id = session_path.read_text().strip() if session_path.is_file() else None
-    prompt_path = args.resume_prompt if session_id is not None and args.resume_prompt is not None else args.prompt
-    if method:
-        bundle = Path(method["optimizer_path"])
-        expected = method["optimizer"]["files"]
-        actual = {
-            p.relative_to(bundle).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
-            for p in sorted(bundle.rglob("*"))
-            if p.is_file()
-        }
-        if actual != expected or any(p.is_symlink() for p in bundle.rglob("*")):
-            raise RuntimeError("optimizer bundle changed before controller loading")
-        prompt_path = bundle / ("resume.md" if session_id and "resume.md" in expected else "instructions.md")
-        prompt = prompt_path.read_text()
-        prompt += "\nResearch objective: " + method["objective"]
-        prompt += "\nPersistent research files (read/write freely): " + method["research_workspace"]
-        prompt += "\nActive research method and tools: " + str(bundle)
-        prompt += (
-            "\nTo change your method, copy it into runs/agent-driven/optimizer/drafts, edit it, then request adopt_optimizer with expected_digest="
-            + method["optimizer"]["digest"]
-        )
-        prompt += "\nPublish intermediate results with publish_best; use pause_research or finish_research to stop. Do not use submit_champion.\n"
-        (attempt_dir / "method-load.json").write_text(json.dumps(method["optimizer"], sort_keys=True) + "\n")
-    else:
-        if prompt_path is None:
-            raise RuntimeError("--prompt is required without a continuous research input")
-        prompt = prompt_path.read_text()
+    bundle = Path(method["optimizer_path"])
+    expected = method["optimizer"]["files"]
+    actual = {
+        p.relative_to(bundle).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+        for p in sorted(bundle.rglob("*"))
+        if p.is_file()
+    }
+    if actual != expected or any(p.is_symlink() for p in bundle.rglob("*")):
+        raise RuntimeError("optimizer bundle changed before controller loading")
+    prompt_path = bundle / ("resume.md" if session_id and "resume.md" in expected else "instructions.md")
+    prompt = prompt_path.read_text()
+    prompt += "\nResearch objective: " + method["objective"]
+    prompt += "\nPersistent research files (read/write freely): " + method["research_workspace"]
+    prompt += "\nActive research method and tools: " + str(bundle)
+    prompt += (
+        "\nTo change your method, copy it into runs/agent-driven/optimizer/drafts, edit it, then request adopt_optimizer with expected_digest="
+        + method["optimizer"]["digest"]
+    )
+    prompt += "\nPublish intermediate results with publish_best; use pause_research or finish_research to stop.\n"
+    (attempt_dir / "method-load.json").write_text(json.dumps(method["optimizer"], sort_keys=True) + "\n")
     if args.isolated_input is not None:
         prompt += _file_protocol(args.isolated_input, workspace)
     elif os.environ.get("EVOLVE_CONTROLLER_ACTION_MODE") == "deferred":
@@ -76,30 +66,14 @@ def main() -> None:
             "mutable surface, before requesting its next action.\n"
         )
     facts_path = os.environ.get("EVOLVE_CONTROLLER_FACTS")
-    if facts_path and method:
+    if facts_path:
         prompt += (
             "\nHost facts and action results: "
             + facts_path
             + ". These receipts, resource limits and evaluator configuration cannot be modified.\n"
         )
-    elif facts_path:
-        prompt += (
-            "\nRead host-derived facts at " + facts_path + ". For observe actions, include a claim "
-            "with path @session, sha256 of those exact bytes, keys selecting the factual field, "
-            "and its value; list @session in evidence. The host re-derives these facts on validation. "
-            "Inspect health.incidents and health.unresolved before planning; retain their evidence in "
-            "your report even if the session completes. Unknown causes are not confirmed infrastructure "
-            "failures. Do not infer trial error counts from action failure counts. "
-            "Inspect evaluations[*].execution for aggregate timeouts even when score is present. "
-            "For training evidence inspect agent_timeout_count and execution.time_budget, including "
-            "successful cases near their limits. Missing timing is unknown, not zero. When time pressure "
-            "is observed, consider a falsifiable budget-aware strategy with a way to observe remaining "
-            "time and preserve a verifiable result; evaluate its score, timeouts and cost together. "
-            "Fewer timeouts alone is not improvement if tasks are abandoned. Do not change frozen "
-            "deadlines, penalties or selection rules, or use sealed failures to tune a candidate.\n"
-        )
     correction_path = (args.isolated_input or attempt_dir.parent) / "correction.json"
-    if method and correction_path.is_file():
+    if correction_path.is_file():
         correction = json.loads(correction_path.read_text())
         if args.isolated_input is not None or correction.get("attempt") == attempt - 1:
             prompt += "\nPrevious action was rejected before execution. Correct it: " + correction["error"]

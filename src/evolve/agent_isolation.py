@@ -30,8 +30,6 @@ def run_isolated_controller(
     broker: ModelBrokerConfig | None = None,
 ) -> OwnedResult:
     """No host repository or ledger is mounted into the research process."""
-    if state.get("mode") != "continuous":
-        raise RuntimeError("isolated controllers require a continuous research session")
     inputs, output = attempt_dir / "isolated-input", attempt_dir / "isolated-output"
     inputs.mkdir()
     output.mkdir()
@@ -59,11 +57,7 @@ def run_isolated_controller(
     (inputs / "session.json").write_text(json.dumps(state, sort_keys=True) + "\n")
     from .agent_driver import _ACTION_FIELDS
 
-    shapes = {
-        k: {"required": sorted(v[0]), "optional": sorted(v[1])}
-        for k, v in _ACTION_FIELDS.items()
-        if k != "submit_champion"
-    }
+    shapes = {k: {"required": sorted(v[0]), "optional": sorted(v[1])} for k, v in _ACTION_FIELDS.items()}
     (inputs / "actions.json").write_text(json.dumps(shapes, sort_keys=True) + "\n")
     champion = state["champion"]
     package = inputs / "champion-package"

@@ -21,7 +21,7 @@ from .agent_driver import (
     session_status,
 )
 from .agent_launcher import ControllerConfig, ControllerLimits, controller_status, launch_controller
-from .agent_research import check_mode, correction
+from .agent_research import correction
 from .runtime.model_broker import ModelBrokerConfig
 from .runtime.sandbox import SandboxConfig
 
@@ -39,7 +39,6 @@ def defer_action(workspace: Path, action: AgentAction) -> dict[str, Any]:
 def _defer_action_locked(workspace: Path, action: AgentAction, *, validate_only: bool = False) -> dict[str, Any]:
     root = workspace / SESSION_DIR
     state = session_status(workspace)
-    check_mode(action.kind, state)
     if state["status"] not in {"active", "exhausted"} and not (
         state["status"] == "paused" and action.kind in {"resume_research", "finish_research"}
     ):
@@ -135,20 +134,7 @@ def _close_budget(workspace: Path, reasons: list[str]) -> None:
     _atomic_json(root / "progression/budget-stop.json", {"exhausted_reasons": reasons, "controller": status})
     if (root / "deferred-action.json").exists():
         resolve_deferred(workspace, "budget exhausted: " + ", ".join(reasons))
-    if state.get("mode") == "continuous":
-        execute_action(
-            workspace, parse_action({"id": "host-budget-stop", "type": "finish_research", "reason": "budget"})
-        )
-        return
-    action = parse_action(
-        {
-            "id": "host-budget-stop",
-            "type": "submit_champion",
-            "genid": state["champion"]["genid"],
-            "stop_reason": "budget",
-        }
-    )
-    execute_action(workspace, action)
+    execute_action(workspace, parse_action({"id": "host-budget-stop", "type": "finish_research", "reason": "budget"}))
 
 
 def drive_controller(workspace: Path, config: ControllerConfig) -> dict[str, Any]:
@@ -196,21 +182,11 @@ def drive_controller(workspace: Path, config: ControllerConfig) -> dict[str, Any
                     result = {
                         "status": state["status"],
                         "research": state["research"],
+                        "evaluations_used": state["evaluations_used"],
+                        "evaluation_limit": state["limits"]["max_evaluations"],
                         "champion": state["champion"],
                         "health": state["health"],
                         "objective_completion": "not_assessed",
-                    }
-                    _atomic_json(root / "status.json", result)
-                    return result
-                if state["status"] == "submitted":
-                    result = {
-                        "status": "submitted",
-                        "evaluations_used": state["evaluations_used"],
-                        "evaluation_limit": state["limits"]["max_evaluations"],
-                        "champion": state["submitted_champion"],
-                        "objective_completion": "not_assessed",
-                        "health": state["health"],
-                        "stop_reason": (state["submitted_champion"] or {}).get("stop_reason", "unspecified"),
                     }
                     if (root / "budget-stop.json").exists():
                         result["budget_exhausted_reasons"] = _read_json_object(root / "budget-stop.json")[
@@ -223,7 +199,7 @@ def drive_controller(workspace: Path, config: ControllerConfig) -> dict[str, Any
                     if reasons:
                         queued = workspace / SESSION_DIR / "deferred-action.json"
                         receipt = _read_json_object(queued) if queued.exists() else {}
-                        if receipt.get("status") == "queued" and receipt["action"]["type"] == "submit_champion":
+                        if receipt.get("status") == "queued" and receipt["action"]["type"] == "finish_research":
                             drain_action(workspace)
                         else:
                             _close_budget(workspace, reasons)
@@ -232,17 +208,16 @@ def drive_controller(workspace: Path, config: ControllerConfig) -> dict[str, Any
                 if drain_action(workspace):
                     continue
                 _atomic_json(root / "status.json", {"status": "controller_running"})
-                launch_controller(workspace, config, deferred_actions=True)
+                launch_controller(workspace, config)
                 state = session_status(workspace)
-                if state["status"] in {"submitted", "finished", "paused"}:
+                if state["status"] in {"finished", "paused"}:
                     continue
                 pending = workspace / SESSION_DIR / "deferred-action.json"
                 if not pending.exists() or _read_json_object(pending)["status"] != "queued":
-                    if state.get("mode") == "continuous":
-                        feedback = correction(workspace, controller_status(workspace)["attempts_used"])
-                        if feedback and feedback["count"] < 3:
-                            continue
-                    raise RuntimeError("controller exited without a deferred action or champion submission")
+                    feedback = correction(workspace, controller_status(workspace)["attempts_used"])
+                    if feedback and feedback["count"] < 3:
+                        continue
+                    raise RuntimeError("controller exited without a deferred action or research finish")
 
         except BaseException as exc:
             _atomic_json(root / "status.json", {"status": "blocked", "reason": type(exc).__name__})

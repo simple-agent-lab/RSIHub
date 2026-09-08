@@ -91,9 +91,7 @@ def draft_source(workspace: Path, relative: str) -> Path:
     return path
 
 
-def controller_input(workspace: Path, state: dict[str, Any], attempt_dir: Path) -> Path | None:
-    if state.get("mode") != "continuous":
-        return None
+def controller_input(workspace: Path, state: dict[str, Any], attempt_dir: Path) -> Path:
     optimizer = state["research"]["active_optimizer"]
     path = verify_optimizer(workspace, optimizer)
     payload = {

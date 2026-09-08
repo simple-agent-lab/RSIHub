@@ -127,7 +127,7 @@ its existing startup behavior, including the sealed baseline anchor regardless o
 
 ```bash
 ./evolve agent prepare .
-./evolve agent start . \
+./evolve agent start . --optimizer /path/to/method --objective "Improve the candidate" \
   --max-actions 20 \
   --max-operator-calls 10 \
   --max-evaluations 3 \
@@ -146,7 +146,9 @@ The outer agent submits one strict JSON action at a time. For example:
 ./evolve agent act . --action \
   '{"id":"check-1","type":"checkpoint","parent":"0","genid":"1"}'
 ./evolve agent act . --action \
-  '{"id":"submit","type":"submit_champion","genid":"1"}'
+  '{"id":"publish","type":"publish_best","genid":"0"}'
+./evolve agent act . --action \
+  '{"id":"finish","type":"finish_research","reason":"completed"}'
 ```
 
 The session writes an append-only action receipt at
@@ -204,32 +206,35 @@ For a long controller run, start the bounded session first and launch the
 controller as an argument vector, without a shell:
 
 ```bash
-./evolve agent start /path/to/agent --max-actions 80 --max-operator-calls 30 \
+./evolve agent start /path/to/agent --optimizer /path/to/method --objective "Improve the candidate" \
+  --max-actions 80 --max-operator-calls 30 \
   --max-evaluations 6 --max-cost-usd 300 --max-wall-s 216000 --require-clean-start
 ./evolve agent run-controller /path/to/agent \
   --controller /path/to/RSIHub/scripts/codex_agent_controller.py \
-  --controller-arg=--prompt --controller-arg=/path/to/controller-prompt.md \
   --controller-arg=--codex-arg --controller-arg=--model=gpt-5.4 \
   --max-attempts 3 --max-controller-tokens 1000000 \
   --max-controller-wall-s 216000
 ```
 
-The launcher runs one attempt per invocation. It sets
+The launcher executes deferred actions between controller attempts until research
+is paused, finished, or blocked. It sets
 `EVOLVE_AGENT_WORKSPACE`, `EVOLVE_CONTROLLER_ATTEMPT_DIR`, and
 `EVOLVE_CONTROLLER_USAGE_RECEIPT`. Before exiting, the controller wrapper must
 write the receipt as
 `{"total_tokens": <integer>, "cost_usd": <number-or-null>}`. A null cost is
-retained as unpriced and is allowed only when no controller or total dollar
-limit was configured. Standard output, standard
+retained as unpriced and blocks further controller calls. Every successful
+attempt must also write `method-load.json` matching the optimizer from
+`EVOLVE_CONTROLLER_INPUT`. Standard output, standard
 error, receipts, and cumulative controller/mechanism cost remain under
 `runs/agent-driven/controller/`. Re-run the exact command to resume. Inspect
 `agent controller-status` first; if the host died between start and terminal
 receipt, use `agent resolve-controller-interrupted` only after checking that no
 controller or child action remains alive. Supply the observed or conservative
-upper-bound `--total-tokens`, plus `--cost-usd` when dollar limits are active,
+upper-bound `--total-tokens` and `--cost-usd`,
 so recovery cannot erase spend. The bundled Codex wrapper records
 Codex 0.149 JSON events and session ID, resumes that session on later attempts,
-and emits token usage; Codex subscription usage remains unpriced.
+and emits token usage. Its native subscription output does not include dollars;
+a trusted cost receipt or the host model broker is needed for accounted execution.
 
 These checks are audit and misuse defenses for a trusted host controller, not
 a security sandbox. A same-UID process can rewrite session metadata or read
@@ -237,22 +242,22 @@ workspace files. Run an untrusted controller under a separate OS identity or
 container with only a brokered action interface; do not describe the current
 host-shell mode as isolated.
 
-After `submit_champion` closes the session, a host operator may run the one-way
+After `finish_research` closes the session, a host operator may run the one-way
 final evaluation. The explicit confirmation is outside `agent act`, and the
-submitted session cannot accept another action afterward:
+finished session cannot accept another action afterward:
 
 ```bash
-./evolve agent seal-submitted . --confirm
+./evolve agent seal-research . --confirm
 ```
 
 When the frozen sealed cohort is empty, both driver final-anchor handling and
-`seal-submitted` are no-ops; the latter reports `sealed: not_configured`.
+`seal-research` are no-ops; the latter reports `sealed: not_configured`.
 
 ### Deferred actions and continuous progression
 
-For long operations, run the controller with `agent run-controller --continuous`.
+Run the controller with `agent run-controller`.
 The controller requests one action using `agent act --defer --action '<JSON>'`,
-then exits with its usage receipt. Continuous mode marks the controller environment
+then exits with its usage receipt. The launcher marks the controller environment
 so CLI actions are deferred even if the controller omits `--defer`; the bundled
 Codex wrapper appends the one-decision handoff instructions. RSIHub executes the action outside the model
 process and launches the next controller attempt after it finishes. Give the
@@ -260,20 +265,20 @@ launcher enough `--max-attempts` for the intended decision count; each handoff
 uses an attempt and all attempts share the configured usage limits.
 
 The durable handoff is `runs/agent-driven/deferred-action.json`; progression
-state lives under `runs/agent-driven/progression/`. Re-run the same continuous
+state lives under `runs/agent-driven/progression/`. Re-run the same
 command after a clean interruption. A crash after action completion but before
 handoff acknowledgment reuses the action receipt instead of repeating the
 operation. An interrupted action remains blocked for explicit inspection and
 resolution; this command never retries uncertain external effects. A controller
-that exits without submitting a champion or deferring work blocks progression
+that exits without finishing research or deferring work blocks progression
 instead of being invoked in a polling loop. This is a foreground execution
 loop: use a process supervisor when survival across host or terminal failure is
 required. It does not install a daemon.
 
-`submit_champion` accepts an optional `stop_reason`: `completed`, `budget`,
-`infrastructure`, `no_improvement`, or `cancelled`. The progression result
-reports the reason and number of candidate evaluations separately from a valid
-champion submission. It does not certify that a user's experimental objective
+`finish_research` requires a non-empty `reason`, recorded in
+`research.finish.reason`. The progression result reports evaluation counts
+separately from the certified champion.
+It does not certify that a user's experimental objective
 was satisfied. Controller token and dollar limits are checked between attempts,
 not during an individual model invocation; wall time is enforced during the
 invocation. Unknown controller cost remains unknown.
@@ -296,8 +301,8 @@ CLI does not install a service or resolve uncertain external side effects.
 
 At a configured budget boundary, continuous progression records
 `progression/budget-stop.json`, releases unstarted queued work with an audit
-reason, and submits the certified best with `stop_reason: budget` without another
-model call. A controller's already queued submission can still finish. Interrupted
+reason, and calls `finish_research` with `reason: budget` without another
+model call. An already queued finish action can still complete. Interrupted
 work or unknown controller cost requires reconciliation instead of automatic
 closure. Limits and usage receipts are retained across resume; this is not an
 in-flight dollar cap.
@@ -353,23 +358,23 @@ zero; this is cumulative trial-phase time, not concurrent batch wall duration.
 
 ### Continuous outer-agent research
 
-`agent start --mode continuous --optimizer PATH --objective TEXT` starts a
+`agent start --optimizer PATH --objective TEXT` starts a
 persistent research session from a certified baseline. `PATH` is a method
 bundle with a non-empty `instructions.md`, optional `resume.md`, and ordinary
 research tools. The host snapshots every file and validates Python syntax;
-this admits a method for use, not as a demonstrated improvement. The original
-agent-session format retains its submit-and-stop behavior; this is unrelated
-to recipe-driven execution.
+this admits a method for use, not as a demonstrated improvement. Agent Driven
+has one research lifecycle. Original batch session manifests are unsupported;
+preserve their records and initialize a fresh research workspace. Fixed
+recipe-driven execution remains a separate workflow.
 
-Run the controller through the existing `agent run-controller --continuous`
-handoff loop. This flag executes deferred actions; the session's `--mode`
-determines whether publishing a result terminates research. The Codex wrapper
+Run the controller through the `agent run-controller` handoff loop. Publishing
+keeps research active; finishing ends it. The Codex wrapper
 loads the exact adopted bundle, receipts its file hashes, and opens a fresh
 model context for each adoption. Attempts and costs remain cumulative.
 
-Continuous-only actions are `adopt_optimizer`, `publish_best`,
+Research actions are `adopt_optimizer`, `publish_best`,
 `pause_research`, `resume_research`, and `finish_research`. Use
-`agent schema --mode continuous` for required fields. To edit a method, copy
+`agent schema` for required fields. To edit a method, copy
 its snapshot into `runs/agent-driven/optimizer/drafts/`, edit there, then adopt
 with `draft_path`, `expected_digest`, and `reason`. To roll back, provide an
 existing `digest` instead of `draft_path`. Adoption takes effect only after
@@ -377,7 +382,7 @@ its completed action receipt. `publish_best` retains the active session;
 `finish_research` closes it. A paused session requires an explicit
 `resume_research` action before resuming its controller.
 
-After `finish_research`, `agent seal-submitted --confirm` evaluates both the
+After `finish_research`, `agent seal-research --confirm` evaluates both the
 session's initial baseline and the selected final candidate on the frozen sealed
 split. If they are the same candidate it evaluates once; already complete anchors
 are reused. A failed baseline acceptance stops before the final candidate, and
@@ -399,7 +404,7 @@ schema or save action is imposed. These files survive method changes and
 rollbacks. Trusted action/usage receipts remain separate. Parse rejections
 before execution can be returned to the controller for correction, with at
 most three consecutive rejected attempts. Unknown external effects still
-require reconciliation, and unknown continuous-session usage blocks more
+require reconciliation, and unknown controller usage blocks more
 paid work. Final sealed evaluation is permitted only after research finishes.
 
 The local controller executes with its existing host permissions. Method
@@ -480,7 +485,7 @@ projection behavior is unchanged.
 
 ### Isolated continuous controller transport
 
-`evolve agent run-controller WORKSPACE --continuous --sandbox-image sha256:IMAGE_ID
+`evolve agent run-controller WORKSPACE --sandbox-image sha256:IMAGE_ID
 --controller python3 --controller-arg /input/optimizer/controller.py` runs the
 controller inside the offline boundary above. Use `--sandbox-timeout` to set the
 per-attempt wall limit. The immutable local image ID and limits persist with the

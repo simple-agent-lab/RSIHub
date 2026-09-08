@@ -21,17 +21,17 @@ decision (and usually a demolition pass) instead of silent sprawl.
 | `__init__.py` | 10 | package marker, version |
 | `__main__.py` | 10 | `python -m evolve` entry |
 | `agent.py` | 200 | agent command execution and error/result types |
-| `agent_cli.py` | 275 | CLI surface for durable outer-agent sessions, deferred handoffs, progression, and recovery |
+| `agent_cli.py` | 250 | CLI for one research lifecycle, deferred progression, sealed acceptance, and recovery |
 | `agent_evidence.py` | 100 | verify structured observation claims against content-addressed workspace evidence |
-| `agent_driver.py` | 975 | typed Agent Driven actions, resource budgets, integrity checks, durable receipts, recovery, and safe orchestration dispatch |
+| `agent_driver.py` | 900 | continuous research actions, resource budgets, integrity checks, durable receipts, recovery, and safe orchestration dispatch |
 | `agent_observability.py` | 175 | project durable action, controller, and handoff incidents into session health without guessing root causes |
 | `integrations/harbor/_time_budget.py` | 125 | resolve declared Harbor agent limits and publish elapsed-time evidence without changing enforcement |
 | `agent_optimizer.py` | 175 | immutable research-method bundles and exact per-attempt loading inputs |
-| `agent_research.py` | 200 | continuous research lifecycle, adoption, and no-effect rejection feedback |
+| `agent_research.py` | 125 | continuous research lifecycle, adoption, and no-effect rejection feedback |
 | `agent_queue.py` | 275 | durable deferred handoff, model-free progression, and certified-best budget closure |
 | `agent_handoff.py` | 200 | durable isolated import journal, directory identity checks, roll-forward recovery and queue handoff |
-| `agent_isolation.py` | 300 | public controller views, untrusted file handoffs and typed host requests for isolated continuous sessions |
-| `agent_launcher.py` | 475 | resumable outer-controller process ownership, usage metering, global budget status, and retained logs |
+| `agent_isolation.py` | 225 | public controller views, untrusted file handoffs and typed host requests for isolated continuous sessions |
+| `agent_launcher.py` | 425 | resumable outer-controller process ownership, usage metering, global budget status, and retained logs |
 | `archive.py` | 475 | append-only event store: merge semantics, stamped-field protection, mirroring, integrity fsck |
 | `candidate/__init__.py` | 10 | candidate-boundary package marker |
 | `candidate/harbor_smoke.py` | 125 | audit Harbor job/task artifacts so process-level success cannot hide trial failures |
@@ -137,7 +137,7 @@ each workspace, immutable there because it sits outside the mutable surface
 | `frozen/interfaces.py` | 375 | operator ABCs, registry, result schemas, and strict operator payload validation |
 | `frozen/sdk.py` | 350 | Python operator entrypoint and file-contract IO; no library algorithm policy |
 
-Total `src/evolve/` budget: **27590 lines**. The budget admits the read-only experiment viewer,
+Total `src/evolve/` budget: **27290 lines**. The budget admits the read-only experiment viewer,
 the explicit content-backed
 evaluation-contract boundaries, the opt-in in-place Harbor runtime, and the redacted trace-analysis
 boundary between rollout and feedback assembly; if the mechanism wants to

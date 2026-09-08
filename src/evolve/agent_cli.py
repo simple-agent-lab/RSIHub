@@ -15,7 +15,7 @@ from .agent_driver import (
     execute_action,
     parse_action,
     resolve_interrupted,
-    seal_submitted,
+    seal_research,
     session_status,
     start_session,
 )
@@ -23,7 +23,6 @@ from .agent_launcher import (
     ControllerConfig,
     ControllerLimits,
     controller_status,
-    launch_controller,
     resolve_controller_interrupted,
 )
 from .agent_queue import defer_action, drive_controller, resolve_deferred, resume_controller
@@ -54,16 +53,14 @@ def build_agent_app(guard) -> typer.Typer:
         max_cost_usd: float | None = typer.Option(None, "--max-cost-usd", min=0.0),
         max_wall_s: float | None = typer.Option(None, "--max-wall-s", min=0.0),
         require_clean_start: bool = typer.Option(False, "--require-clean-start"),
-        mode: str = typer.Option("batch", "--mode"),
-        optimizer: Path | None = typer.Option(None, "--optimizer"),
-        objective: str = typer.Option("", "--objective"),
+        optimizer: Path = typer.Option(..., "--optimizer"),
+        objective: str = typer.Option(..., "--objective"),
     ) -> None:
         """Start or resume a bounded session from a certified parent."""
         state = start_session(
             workspace,
             AgentLimits(max_actions, max_operator_calls, max_evaluations, max_cost_usd, max_wall_s),
             require_clean_start=require_clean_start,
-            mode=mode,
             optimizer=optimizer,
             objective=objective,
         )
@@ -76,18 +73,13 @@ def build_agent_app(guard) -> typer.Typer:
         print(json.dumps(session_status(workspace), sort_keys=True, allow_nan=False))
 
     @app.command("schema")
-    def schema(mode: str = typer.Option("batch", "--mode")) -> None:
+    def schema() -> None:
         """Print the strict action shapes accepted by ``agent act``."""
         from .agent_driver import _ACTION_FIELDS
-
-        if mode not in {"batch", "continuous"}:
-            raise typer.BadParameter("mode must be batch or continuous")
-        from .agent_research import FIELDS
 
         shapes = {
             name: {"required": sorted(required), "optional": sorted(optional)}
             for name, (required, optional) in _ACTION_FIELDS.items()
-            if (name != "submit_champion" if mode == "continuous" else name not in FIELDS)
         }
         print(json.dumps(shapes, sort_keys=True))
 
@@ -110,9 +102,6 @@ def build_agent_app(guard) -> typer.Typer:
         controller: str = typer.Option(..., "--controller", help="controller executable path or name"),
         controller_arg: list[str] = typer.Option([], "--controller-arg", help="repeat for each literal argument"),
         max_attempts: int = typer.Option(3, "--max-attempts", min=1),
-        continuous: bool = typer.Option(
-            False, "--continuous", help="execute deferred actions between controller attempts"
-        ),
         max_controller_tokens: int | None = typer.Option(None, "--max-controller-tokens", min=1),
         max_controller_cost_usd: float | None = typer.Option(None, "--max-controller-cost-usd", min=0.0),
         max_controller_wall_s: float | None = typer.Option(None, "--max-controller-wall-s", min=0.0),
@@ -124,7 +113,7 @@ def build_agent_app(guard) -> typer.Typer:
         max_model_requests: int = typer.Option(100, "--max-model-requests", min=1),
         model_request_timeout: float = typer.Option(POLICY.model_request_timeout_s, "--model-request-timeout", min=0.1),
     ) -> None:
-        """Run one resumable, durably metered outer-controller attempt."""
+        """Run research with durable handoffs until paused, finished, or blocked."""
         limits = ControllerLimits(
             max_attempts=max_attempts,
             max_tokens=max_controller_tokens,
@@ -147,8 +136,7 @@ def build_agent_app(guard) -> typer.Typer:
             SandboxConfig(sandbox_image, sandbox_timeout) if sandbox_image is not None else None,
             broker,
         )
-        runner = drive_controller if continuous else launch_controller
-        print(json.dumps(runner(workspace, config), sort_keys=True, allow_nan=False))
+        print(json.dumps(drive_controller(workspace, config), sort_keys=True, allow_nan=False))
 
     @app.command("controller-status")
     @guard
@@ -235,16 +223,16 @@ def build_agent_app(guard) -> typer.Typer:
         """Mark one interrupted action failed after inspecting its side effects."""
         print(json.dumps(resolve_interrupted(workspace, action_id, reason), sort_keys=True, allow_nan=False))
 
-    @app.command("seal-submitted")
+    @app.command("seal-research")
     @guard
     def seal(
         workspace: Path = typer.Argument(Path(".")),
         confirm: bool = typer.Option(False, "--confirm", help="confirm paid final sealed evaluation"),
     ) -> None:
-        """Run Seal after the controller has exited by submitting a champion."""
+        """Evaluate initial and final candidates on sealed data after research finishes."""
         if not confirm:
             raise typer.BadParameter("--confirm is required", param_hint="--confirm")
-        print(json.dumps(seal_submitted(workspace), sort_keys=True, allow_nan=False))
+        print(json.dumps(seal_research(workspace), sort_keys=True, allow_nan=False))
 
     return app
 
