@@ -1,3 +1,5 @@
+import json
+from dataclasses import asdict
 from pathlib import Path
 
 import pytest
@@ -18,22 +20,26 @@ def test_sandbox_never_forwards_host_authority_and_always_cleans_up(tmp_path: Pa
 
     def run(command, **kwargs):
         calls.append((command, kwargs))
-        return OwnedResult(0, "", "", 0.1, command[1] == "run")
+        return OwnedResult(0, json.dumps(asdict(OwnedResult(1, "", "", 0.1, True))), "", 0.1, False)
 
     monkeypatch.setattr("evolve.runtime.sandbox.run_owned", run)
     result = run_sandbox(
         SandboxConfig("fixture", 1), image_id=IMAGE, command=["sh", "-c", "true"], inputs=inputs, output=output
     )
     assert result.timed_out
-    command, kwargs = calls[0]
+    supervisor, kwargs = calls[0]
+    job = json.loads(Path(supervisor[-1]).read_text())
+    command = job["argv"]
     assert "PRIVATE_TEST_TOKEN" not in kwargs["env"]
     assert "--network=none" in command
     assert "--cap-drop=ALL" in command
     assert "--read-only" in command
     assert "--pull=never" in command
-    assert command.count("--mount") == 2
-    assert command[-3:] == [IMAGE, "-c", "true"]
-    assert calls[1][0][:3] == ["docker", "rm", "-f"]
+    assert command.count("--mount") == 1
+    assert any("/output:rw,nosuid,nodev,size=64m" in arg for arg in command)
+    assert command[-3:] == ["sh", "-c", "true"]
+    assert job["owner_pid"] > 0
+    assert supervisor[1:3] == ["-m", "evolve.runtime.sandbox_supervisor"]
 
 
 def test_cleanup_failure_is_not_reported_as_success(tmp_path: Path, monkeypatch) -> None:
@@ -43,7 +49,13 @@ def test_cleanup_failure_is_not_reported_as_success(tmp_path: Path, monkeypatch)
     output.mkdir()
     monkeypatch.setattr(
         "evolve.runtime.sandbox.run_owned",
-        lambda command, **kwargs: OwnedResult(1 if command[1] == "rm" else 0, "", "daemon unavailable", 0.1, False),
+        lambda command, **kwargs: OwnedResult(
+            0,
+            json.dumps(asdict(OwnedResult(1, "", "sandbox container cleanup is unconfirmed", 0.1, False))),
+            "",
+            0.1,
+            False,
+        ),
     )
     with pytest.raises(RuntimeError, match="cleanup is unconfirmed"):
         run_sandbox(SandboxConfig("fixture", 1), image_id=IMAGE, command=["true"], inputs=inputs, output=output)

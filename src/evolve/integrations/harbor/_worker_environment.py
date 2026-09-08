@@ -101,6 +101,7 @@ class WorkerEnvironment:
                 path = target / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 write_regular_file(target, name, data)
+                path.chmod(0o700 if files[name]["executable"] else 0o600)
 
 
 async def dispatch_environment(environment: Any, payload: Any) -> Any:

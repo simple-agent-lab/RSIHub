@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import math
 import os
 import re
+import sys
+import tempfile
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,6 +22,7 @@ class SandboxConfig:
     memory_mb: int = 1024
     pids: int = 128
     docker: str = "docker"
+    output_mb: int = 64
 
     def validate(self) -> None:
         if not self.image or self.image.startswith("-") or any(c in self.image for c in "\0\r\n"):
@@ -27,6 +31,8 @@ class SandboxConfig:
             raise RuntimeError("sandbox requires a positive finite timeout")
         if any(type(n) is not int or n < 1 for n in (self.memory_mb, self.pids)):
             raise RuntimeError("sandbox memory and process limits must be positive integers")
+        if type(self.output_mb) is not int or not 1 <= self.output_mb <= 64:
+            raise RuntimeError("sandbox output must be between 1 and 64 MiB")
         if os.getuid() == 0:
             raise RuntimeError("sandbox launcher must run as a non-root user")
 
@@ -60,7 +66,7 @@ def run_sandbox(
     output: Path,
     container_name: str | None = None,
 ) -> OwnedResult:
-    """Only /input (read-only) and /output (writable) are host-mounted.
+    """Only /input is host-mounted; /output is a bounded, mirrored tmpfs.
 
     The caller must prepare public inputs and treat every output as untrusted.
     No evaluator, repository, Docker socket, host PID namespace, network or
@@ -83,7 +89,11 @@ def run_sandbox(
     argv = [
         config.docker,
         "run",
-        "--rm",
+        "--detach",
+        "--log-driver=local",
+        "--log-opt=max-size=1m",
+        "--log-opt=max-file=1",
+        "--log-opt=compress=false",
         "--pull=never",
         "--name",
         name,
@@ -105,20 +115,48 @@ def run_sandbox(
         "/output",
         "--mount",
         f"type=bind,src={inputs},dst=/input,readonly",
-        "--mount",
-        f"type=bind,src={output},dst=/output",
+        "--tmpfs",
+        f"/output:rw,nosuid,nodev,size={config.output_mb}m,nr_inodes=8192,uid={os.getuid()},gid={os.getgid()},mode=0700",
         "--entrypoint",
-        command[0],
+        "/bin/sh",
         image_id,
-        *command[1:],
+        "-c",
+        "while [ ! -f /tmp/.evolve-start ]; do sleep 0.02; done; "
+        '"$@"; code=$?; printf "%s" "$code" > /tmp/.evolve-exit; '
+        "while :; do sleep 1; done",
+        "evolve-entrypoint",
+        *command,
     ]
-    try:
-        return run_owned(argv, cwd=output, env=_environment(), timeout_s=config.timeout_s)
-    finally:
-        # A killed Docker CLI can leave the daemon-owned workload alive.
-        cleanup = run_owned([config.docker, "rm", "-f", name], cwd=output, env=_environment(), timeout_s=15)
-        if cleanup.timed_out or (cleanup.returncode and "No such container" not in cleanup.stderr):
-            raise RuntimeError("sandbox container cleanup is unconfirmed; inspect the Docker daemon")
+    from .files import read_tree
+
+    read_tree(output)  # Enforce input size/type limits before any daemon-side creation.
+    lease = Path(tempfile.mkdtemp(prefix="sandbox-lease-", dir=inputs.parent))
+    job_path = lease / "job.json"
+    job_path.write_text(
+        json.dumps(
+            {
+                "docker": config.docker,
+                "name": name,
+                "owner_pid": os.getpid(),
+                "timeout_s": config.timeout_s,
+                "output": str(output),
+                "argv": argv[1:],
+            }
+        )
+    )
+    result = run_owned(
+        [sys.executable, "-m", "evolve.runtime.sandbox_supervisor", str(job_path)],
+        cwd=lease,
+        env={**_environment(), "PYTHONPATH": str(Path(__file__).resolve().parents[2])},
+        timeout_s=config.timeout_s + 90,
+    )
+    if result.returncode or result.timed_out:
+        run_owned([config.docker, "rm", "-f", name], cwd=lease, env=_environment(), timeout_s=15)
+        raise RuntimeError("sandbox supervisor failed; inspect its lease and cleanup receipt: " + str(lease))
+    payload = json.loads(result.stdout)
+    if "cleanup is unconfirmed" in payload["stderr"]:
+        raise RuntimeError(payload["stderr"])
+    return OwnedResult(**payload)
 
 
 def boundary_receipt(image_id: str) -> dict[str, object]:
@@ -127,7 +165,8 @@ def boundary_receipt(image_id: str) -> dict[str, object]:
         "network": "none",
         "host_environment_forwarded": [],
         "input_mount": {"path": "/input", "read_only": True},
-        "output_mount": {"path": "/output", "read_only": False},
+        "output_mount": {"path": "/output", "read_only": False, "type": "tmpfs", "max_bytes": 64 * 1024 * 1024},
+        "supervision": "independent host process with owner-death and deadline cleanup",
         "host_pid_namespace": False,
         "docker_socket": False,
         "uid": os.getuid(),

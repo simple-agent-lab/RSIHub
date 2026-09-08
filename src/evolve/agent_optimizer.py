@@ -9,20 +9,15 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from .runtime.files import FileTree, read_tree, write_tree
+
 ROOT = Path("runs/agent-driven")
 
 
-def _files(directory: Path) -> dict[str, bytes]:
+def _files(directory: Path) -> FileTree:
     if directory.is_symlink() or not directory.is_dir():
         raise RuntimeError("optimizer must be a real directory")
-    files = {}
-    for path in sorted(directory.rglob("*")):
-        if path.is_symlink():
-            raise RuntimeError("optimizer symlinks are not allowed")
-        if path.is_file():
-            files[path.relative_to(directory).as_posix()] = path.read_bytes()
-        elif not path.is_dir():
-            raise RuntimeError("optimizer contains a non-regular file")
+    files = read_tree(directory)
     if not files.get("instructions.md", b"").strip():
         raise RuntimeError("optimizer requires non-empty instructions.md")
     for name, data in files.items():
@@ -36,7 +31,11 @@ def _files(directory: Path) -> dict[str, bytes]:
 
 def _identity(files: dict[str, bytes]) -> tuple[str, dict[str, str]]:
     hashes = {name: hashlib.sha256(content).hexdigest() for name, content in files.items()}
-    digest = hashlib.sha256(json.dumps(hashes, sort_keys=True).encode()).hexdigest()
+    digest = hashlib.sha256(
+        json.dumps(
+            {"hashes": hashes, "executables": sorted(getattr(files, "executables", ()))}, sort_keys=True
+        ).encode()
+    ).hexdigest()
     return digest, hashes
 
 
@@ -45,6 +44,10 @@ def freeze_optimizer(workspace: Path, source: Path) -> dict[str, Any]:
     files = _files(source)
     digest, hashes = _identity(files)
     parent = workspace / ROOT / "optimizer/versions"
+    # Legacy snapshots used a byte-only identity and were always non-executable.
+    legacy = hashlib.sha256(json.dumps(hashes, sort_keys=True).encode()).hexdigest()
+    if source.parent.resolve() == parent.resolve() and source.name == legacy and not files.executables:
+        return {"digest": legacy, "files": hashes}
     parent.mkdir(parents=True, exist_ok=True)
     destination = parent / digest
     if destination.exists():
@@ -53,15 +56,13 @@ def freeze_optimizer(workspace: Path, source: Path) -> dict[str, Any]:
     else:
         temporary = Path(tempfile.mkdtemp(prefix=".staging-", dir=parent))
         try:
-            for name, data in files.items():
-                path = temporary / name
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_bytes(data)
+            temporary.rmdir()
+            write_tree(temporary, files)
             temporary.rename(destination)
         finally:
             if temporary.exists():
                 shutil.rmtree(temporary)
-    return {"digest": digest, "files": hashes}
+    return {"digest": digest, "files": hashes, "executables": sorted(files.executables)}
 
 
 def verify_optimizer(workspace: Path, optimizer: dict[str, Any]) -> Path:
@@ -69,7 +70,14 @@ def verify_optimizer(workspace: Path, optimizer: dict[str, Any]) -> Path:
     if not isinstance(digest, str) or len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
         raise RuntimeError("invalid optimizer digest")
     path = workspace / ROOT / "optimizer/versions" / digest
-    actual, hashes = _identity(_files(path))
+    files = _files(path)
+    actual, hashes = _identity(files)
+    if "executables" not in optimizer:
+        if files.executables:
+            raise RuntimeError("legacy optimizer snapshot permissions were modified")
+        actual = hashlib.sha256(json.dumps(hashes, sort_keys=True).encode()).hexdigest()
+    elif sorted(files.executables) != optimizer["executables"]:
+        raise RuntimeError("optimizer snapshot permissions were modified")
     if actual != digest or hashes != optimizer.get("files"):
         raise RuntimeError("optimizer snapshot was modified")
     return path

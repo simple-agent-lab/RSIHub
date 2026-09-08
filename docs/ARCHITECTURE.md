@@ -84,7 +84,9 @@ decision (and usually a demolition pass) instead of silent sprawl.
 | `runtime/model_bridge.py` | 175 | container-local HTTP client bridge to the metered file transport without provider credentials |
 | `runtime/model_broker.py` | 300 | host-owned metered model requests over an untrusted file transport with duplicate and unknown-cost protection |
 | `runtime/files.py` | 175 | read regular files and explicit trees without following untrusted links |
-| `runtime/sandbox.py` | 200 | run offline untrusted code in a pinned Docker image with only explicit input and output mounts |
+| `runtime/sandbox.py` | 200 | pinned offline container configuration and bounded tmpfs output |
+| `runtime/sandbox_io.py` | 225 | bounded process capture and validated archive transport |
+| `runtime/sandbox_supervisor.py` | 175 | independent container deadline, owner liveness and cleanup |
 | `runtime/auth.py` | 100 | explicit API-key or Codex auth-file selection without home-directory discovery |
 | `runtime/config.py` | 300 | inline runtime validation, endpoint identity, canonical resolution, and trusted loading |
 | `runtime/environment.py` | 450 | strict and legacy role-specific credential, endpoint, proxy, template, and redacted Harbor environment planning |
@@ -132,7 +134,7 @@ each workspace, immutable there because it sits outside the mutable surface
 | `frozen/interfaces.py` | 375 | operator ABCs, registry, result schemas, and strict operator payload validation |
 | `frozen/sdk.py` | 350 | Python operator entrypoint and file-contract IO; no library algorithm policy |
 
-Total `src/evolve/` budget: **26740 lines**. The budget admits the read-only experiment viewer,
+Total `src/evolve/` budget: **27140 lines**. The budget admits the read-only experiment viewer,
 the explicit content-backed
 evaluation-contract boundaries, the opt-in in-place Harbor runtime, and the redacted trace-analysis
 boundary between rollout and feedback assembly; if the mechanism wants to

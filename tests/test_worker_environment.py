@@ -103,3 +103,18 @@ def test_download_symlink_does_not_disclose_host_file(tmp_path):
                 MaliciousDownload(), {"method": "download_file", "arguments": {"source_path": "/task/file"}}
             )
         )
+
+
+def test_download_directory_preserves_executable_files(tmp_path):
+    import os
+
+    from evolve.integrations.harbor._worker_environment import WorkerEnvironment
+
+    environment = WorkerEnvironment(tmp_path)
+
+    async def reply(*args):
+        return {"bin/tool": {"data": base64.b64encode(b"#!/bin/sh\nexit 0\n").decode(), "executable": True}}
+
+    environment._request = reply
+    asyncio.run(environment.download_dir("/task/built", tmp_path / "download"))
+    assert os.access(tmp_path / "download/bin/tool", os.X_OK)

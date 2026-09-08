@@ -37,6 +37,8 @@ def test_release_wheel_has_one_resource_owner_and_complete_metadata() -> None:
             "evolve/library/PROTOCOL.md",
             "evolve/library/__init__.py",
             "evolve/frozen/config.py",
+            "evolve/runtime/sandbox_supervisor.py",
+            "evolve/runtime/sandbox_io.py",
             "evolve/library/analyze/failure_patterns.py",
             "evolve/library/mutate/hyperagents.py",
             "evolve/recipes/aevolve/evolve.yaml",

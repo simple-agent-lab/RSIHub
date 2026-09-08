@@ -414,10 +414,36 @@ filesystem. It receives no network, Docker socket, host credentials or host PID
 namespace. The default timeout is 60 seconds (`--timeout` overrides it).
 
 The host retains `execution.json`, stdout, and stderr outside the writable
-output mount; Docker cleanup is attempted even on timeout or cancellation.
+output tree; Docker cleanup is attempted even on timeout or cancellation.
 Unconfirmed cleanup is an error. This is an offline execution interface, not a
 replacement for canonical benchmark evaluation: it supplies neither a model
 service nor private verifier access, and does not stamp a benchmark score.
+
+Sandbox images must provide `/bin/sh`, `tar`, `sleep`, `cat`, and `touch`.
+Only `/input` is a host bind mount. `/output` is a 64 MiB container tmpfs
+(`SandboxConfig.output_mb` may reduce it), limited to 8192 inodes. A separate
+host supervisor exchanges bounded tar streams, validates paths and regular-file
+types, and mirrors accepted files; host-owned broker/RPC replies travel back
+through the same transport. Docker's copy API is not used because it does not
+reliably expose tmpfs contents. Transfers are snapshots, not transactional file
+systems; copying larger outputs adds latency.
+
+File handoffs accept at most 32 MiB per file, 64 MiB per tree, 4096 entries and
+32 path components. Executable bits survive method freezing and transport and
+are included in new optimizer identities; other permissions normalize to owner
+read/write. Legacy byte-only snapshots remain readable and reusable only without
+executable files. Oversized, linked or special-file output fails closed. Obsolete
+mirrored files and directories are removed so output churn cannot accumulate
+unbounded host files. Docker logs rotate at 1 MiB and returned logs are limited
+to the last 1000 lines and 1 MiB; logs are therefore not a complete transcript.
+
+The independent supervisor enforces the deadline (including startup and transfer)
+and detects loss of its launcher, including SIGKILL. Liveness is checked between Docker commands, each bounded
+to at most 15 seconds. It removes the container
+before returning and writes a cleanup receipt in `sandbox-lease-*` beside the
+input tree. Cleanup can take up to 15 additional seconds. This protection requires
+a surviving supervisor and reachable Docker daemon; simultaneous host/supervisor
+failure or daemon unavailability still requires external reconciliation.
 
 ### Isolated continuous controller transport
 

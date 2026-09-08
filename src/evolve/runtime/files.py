@@ -7,8 +7,22 @@ import stat
 import uuid
 from pathlib import Path, PurePosixPath
 
+MAX_FILE_BYTES = 32 * 1024 * 1024
+MAX_TREE_BYTES = 64 * 1024 * 1024
+MAX_TREE_ENTRIES = 4096
+MAX_TREE_DEPTH = 32
 
-def read_regular_file(root: Path, name: str, *, max_bytes: int | None = None) -> bytes:
+
+class FileTree(dict[str, bytes]):
+    """Validated bytes with only the executable permission bit retained."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.executables: set[str] = set()
+        self.directories: set[str] = set()
+
+
+def read_regular_file(root: Path, name: str, *, max_bytes: int = MAX_FILE_BYTES) -> bytes:
     """Open every path component without following links, including during races."""
     if not name or PurePosixPath(name).is_absolute() or ".." in PurePosixPath(name).parts:
         raise RuntimeError("file handoff path escapes its tree")
@@ -23,30 +37,53 @@ def read_regular_file(root: Path, name: str, *, max_bytes: int | None = None) ->
         with os.fdopen(descriptor, "rb") as stream:
             if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
                 raise RuntimeError("candidate package must contain only regular files")
-            data = stream.read() if max_bytes is None else stream.read(max_bytes + 1)
-            if max_bytes is not None and len(data) > max_bytes:
+            if os.fstat(stream.fileno()).st_size > max_bytes:
+                raise RuntimeError("file handoff exceeds its byte limit")
+            data = stream.read(max_bytes + 1)
+            if len(data) > max_bytes:
                 raise RuntimeError("file handoff exceeds its byte limit")
             return data
     finally:
         os.close(directory)
 
 
-def read_tree(root: Path) -> dict[str, bytes]:
+def read_tree(root: Path) -> FileTree:
     if root.is_symlink() or not root.is_dir():
         raise RuntimeError("file handoff requires a real directory")
-    files = {}
-    for path in sorted(root.rglob("*")):
-        if path.is_symlink():
-            raise RuntimeError("file handoff rejects symlinks")
-        if path.is_dir():
-            continue
-        name = path.relative_to(root).as_posix()
-        files[name] = read_regular_file(root, name)
+    files = FileTree()
+    total = 0
+    count = 0
+    pending = [(root, 0)]
+    while pending:
+        directory, depth = pending.pop()
+        with os.scandir(directory) as entries:
+            for entry in entries:
+                count += 1
+                if count > MAX_TREE_ENTRIES or depth >= MAX_TREE_DEPTH:
+                    raise RuntimeError("file handoff exceeds its entry or depth limit")
+                if entry.is_symlink():
+                    raise RuntimeError("file handoff rejects symlinks")
+                path = Path(entry.path)
+                if entry.is_dir(follow_symlinks=False):
+                    files.directories.add(path.relative_to(root).as_posix())
+                    pending.append((path, depth + 1))
+                    continue
+                name = path.relative_to(root).as_posix()
+                data = read_regular_file(root, name, max_bytes=min(MAX_FILE_BYTES, MAX_TREE_BYTES - total))
+                total += len(data)
+                files[name] = data
+                if entry.stat(follow_symlinks=False).st_mode & 0o111:
+                    files.executables.add(name)
     return files
 
 
 def write_tree(root: Path, files: dict[str, bytes]) -> None:
     """Write a fresh host-owned tree; callers validate the destination authority."""
+    if len(files) > MAX_TREE_ENTRIES or sum(map(len, files.values())) > MAX_TREE_BYTES:
+        raise RuntimeError("file handoff exceeds its tree limit")
+    for name, data in files.items():
+        if len(data) > MAX_FILE_BYTES or len(PurePosixPath(name).parts) > MAX_TREE_DEPTH:
+            raise RuntimeError("file handoff exceeds its file or depth limit")
     root.mkdir(parents=True, exist_ok=False)
     for name, data in files.items():
         path = root / name
@@ -54,12 +91,15 @@ def write_tree(root: Path, files: dict[str, bytes]) -> None:
             raise RuntimeError("file handoff path escapes its tree")
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
+        path.chmod(0o700 if name in getattr(files, "executables", ()) else 0o600)
 
 
 def write_regular_file(root: Path, name: str, data: bytes) -> None:
     """Publish a response without following replaced output-directory links."""
     if not name or PurePosixPath(name).is_absolute() or ".." in PurePosixPath(name).parts:
         raise RuntimeError("file handoff path escapes its tree")
+    if len(data) > MAX_FILE_BYTES:
+        raise RuntimeError("file handoff exceeds its byte limit")
     directory = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     temporary = ".response-" + uuid.uuid4().hex
     created = False
