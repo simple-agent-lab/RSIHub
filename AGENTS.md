@@ -34,6 +34,10 @@ Choose tests by behavior, not just by filename. Typical mappings are:
   applicable.
 - Architecture/module inventory changes: the relevant
   `tests/test_coherence.py` nodes.
+- Legacy recipe/operator/driver changes: `tests/test_recipe_full_cycle.py` with
+  `--run-slow` on Linux (requires libseccomp and cached uv dependencies/Python).
+  It runs nine original recipes through one generation with real operators and
+  evaluator scripts, a deterministic Harbor substitute, and blocked network access.
 - `gepa_local` local-Harbor generation changes: the focused recipe tests and
   `tests/test_gepa_local_recipe.py::test_gepa_local_full_generation_improves_champion`
   with `--run-slow`.
