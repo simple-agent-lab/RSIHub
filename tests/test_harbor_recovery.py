@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from click import unstyle
 from typer.testing import CliRunner
 
 from evolve.cli import app
@@ -82,7 +83,7 @@ def test_failed_process_keeps_original_backup(recovery):
 def test_cli_recovery_requires_explicit_inputs():
     result = CliRunner().invoke(app, ["harbor-resume", "/tmp/example"])
     assert result.exit_code != 0
-    assert "config-sha256" in result.output
+    assert "config-sha256" in unstyle(result.output)
 
 
 def test_unresolved_recovery_blocks_duplicate_process(recovery):
