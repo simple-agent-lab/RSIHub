@@ -27,7 +27,7 @@ would prefer to skip it; that is a mechanism boundary, not search policy.
 Start only from a certified valid parent, then use the durable action surface:
 
 ```bash
-./evolve eval . 0
+./evolve agent prepare .
 ./evolve agent start . --max-actions 20 --max-operator-calls 10 --max-evaluations 3 \
   --max-cost-usd 10 --max-wall-s 3600 --require-clean-start
 ./evolve agent schema

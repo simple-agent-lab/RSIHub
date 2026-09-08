@@ -29,6 +29,7 @@ decision (and usually a demolition pass) instead of silent sprawl.
 | `agent_optimizer.py` | 175 | immutable research-method bundles and exact per-attempt loading inputs |
 | `agent_research.py` | 200 | continuous research lifecycle, adoption, and no-effect rejection feedback |
 | `agent_queue.py` | 275 | durable deferred handoff, model-free progression, and certified-best budget closure |
+| `agent_handoff.py` | 200 | durable isolated import journal, directory identity checks, roll-forward recovery and queue handoff |
 | `agent_isolation.py` | 300 | public controller views, untrusted file handoffs and typed host requests for isolated continuous sessions |
 | `agent_launcher.py` | 475 | resumable outer-controller process ownership, usage metering, global budget status, and retained logs |
 | `archive.py` | 475 | append-only event store: merge semantics, stamped-field protection, mirroring, integrity fsck |
@@ -136,7 +137,7 @@ each workspace, immutable there because it sits outside the mutable surface
 | `frozen/interfaces.py` | 375 | operator ABCs, registry, result schemas, and strict operator payload validation |
 | `frozen/sdk.py` | 350 | Python operator entrypoint and file-contract IO; no library algorithm policy |
 
-Total `src/evolve/` budget: **27390 lines**. The budget admits the read-only experiment viewer,
+Total `src/evolve/` budget: **27590 lines**. The budget admits the read-only experiment viewer,
 the explicit content-backed
 evaluation-contract boundaries, the opt-in in-place Harbor runtime, and the redacted trace-analysis
 boundary between rollout and feedback assembly; if the mechanism wants to

@@ -89,7 +89,7 @@ def test_run_evaluates_genesis_gate_and_private_sealed_anchor_once(tmp_path: Pat
     assert '"purpose": "anchor"' not in visible_feedback
 
 
-def test_run_skips_genesis_anchor_when_final_anchor_is_disabled(tmp_path: Path) -> None:
+def test_ordinary_run_keeps_genesis_anchor_when_final_anchor_is_disabled(tmp_path: Path) -> None:
     workspace = _lifecycle_workspace(
         tmp_path,
         {
@@ -102,7 +102,7 @@ def test_run_skips_genesis_anchor_when_final_anchor_is_disabled(tmp_path: Path) 
 
     run(RunOptions(workspace, max_generations=0))
 
-    assert [event["purpose"] for event in _evaluation_events(workspace, "0")] == ["genesis"]
+    assert [event["purpose"] for event in _evaluation_events(workspace, "0")] == ["genesis", "anchor"]
 
 
 def test_final_anchor_is_skipped_when_sealed_split_is_empty(tmp_path: Path) -> None:
@@ -169,3 +169,25 @@ def test_candidate_infrastructure_failure_is_recorded_without_automatic_retry(
     assert "repaired_tasks" not in attempts[0]
     assert rows_by_genid(workspace)["1"]["attempt"] == 1
     assert rows_by_genid(workspace)["1"]["status"] == "infrastructure_failed"
+
+
+def test_agent_prepare_uses_development_only_then_continuous_seal_compares_baseline(tmp_path: Path) -> None:
+    from evolve.agent_driver import AgentLimits, execute_action, parse_action, seal_submitted, start_session
+    from evolve.orchestration import prepare_agent_baseline
+
+    workspace = _lifecycle_workspace(tmp_path, {"genesis": ["benchmark_complete"], "anchor": ["benchmark_complete"]})
+    prepare_agent_baseline(workspace)
+    prepare_agent_baseline(workspace)
+    assert [e["purpose"] for e in _evaluation_events(workspace, "0")] == ["genesis"]
+    method = tmp_path / "method"
+    method.mkdir()
+    (method / "instructions.md").write_text("research")
+    start_session(workspace, AgentLimits(10, 3, 3), mode="continuous", optimizer=method, objective="improve")
+    with pytest.raises(RuntimeError, match="sealed evaluation requires"):
+        seal_submitted(workspace)
+    execute_action(workspace, parse_action({"id": "finish", "type": "finish_research", "reason": "complete"}))
+    result = seal_submitted(workspace)
+    assert result["baseline"]["sealed"] == "benchmark_complete"
+    assert result["final"] == result["baseline"]
+    assert seal_submitted(workspace)["final"]["sealed"] == "already complete"
+    assert [e["purpose"] for e in _evaluation_events(workspace, "0")] == ["genesis", "anchor"]

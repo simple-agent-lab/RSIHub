@@ -17,6 +17,7 @@ from .doctor import ensure_evaluator_ready
 from .driver import (
     _assert_child_worktree_for_parent,
     _assert_valid_parent,
+    _ensure_genesis_evaluated,
     _evaluate_once,
     _evaluation_pending_gate_record_genids,
     _has_complete_anchor,
@@ -421,3 +422,16 @@ def _merge_config(base: dict[str, Any], override: dict[str, Any]) -> dict[str, A
         current = merged.get(key)
         merged[key] = _merge_config(current, value) if isinstance(current, dict) and isinstance(value, dict) else value
     return merged
+
+
+def prepare_agent_baseline(workspace: Path) -> None:
+    """Certify the development baseline without opening sealed data."""
+    workspace = workspace.resolve()
+    _assert_agent_session_route(workspace, False)
+    from .agent_driver import _sealed_evidence_exists
+
+    with workspace_run_lock(workspace):
+        if _sealed_evidence_exists(workspace):
+            raise RuntimeError("research preparation requires a fresh workspace without sealed evaluation")
+        ensure_evaluator_ready(workspace)
+        _ensure_genesis_evaluated(workspace)

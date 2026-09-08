@@ -27,7 +27,13 @@ seed on the configured primary split (normally `gate`) and then evaluates the
 same snapshot on the complete non-empty `sealed` split. The sealed result is a
 non-selectable `anchor`, is stored as auxiliary evidence, and is excluded from
 the mutation feedback projection. Generation one cannot begin until both
-required evaluations complete.
+required evaluations complete. `anchor.final` controls the final anchor only.
+
+The separate research workflow begins with `evolve agent prepare`: certify the
+primary development baseline without reading sealed data, then start the agent
+session. Continuous research publishes intermediate candidates without sealed
+evaluation. After research finishes, explicit sealed acceptance evaluates the
+initial baseline and selected final candidate on the same frozen split.
 
 ## Recipe-driven initialization
 

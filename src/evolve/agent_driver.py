@@ -183,7 +183,7 @@ def start_session(
         raise RuntimeError("optimizer and objective require continuous mode")
     champion = best_row(workspace)
     if champion is None:
-        raise RuntimeError("Agent Driven mode requires a certified valid parent; evaluate and finalize gen/0 first")
+        raise RuntimeError("Agent Driven mode requires a certified valid parent; run evolve agent prepare first")
     if _sealed_evidence_exists(workspace):
         raise RuntimeError("Agent Driven mode must start before sealed evaluation exists; use a fresh workspace")
     occupied = sorted(set(rows_by_genid(workspace)) - {str(champion.get("genid"))})
@@ -268,9 +268,12 @@ def parse_action(payload: Mapping[str, Any]) -> AgentAction:
 
 
 def execute_action(workspace: Path, action: AgentAction) -> dict[str, Any]:
+    from .agent_handoff import assert_handoff_complete
+
     workspace = workspace.resolve()
     root = workspace / SESSION_DIR
     with _session_lock(root):
+        assert_handoff_complete(workspace)
         manifest = _read_json_object(root / "manifest.json")
         events = _read_events(root / "actions.jsonl")
         duplicate = _terminal_event(events, action.action_id)
@@ -401,16 +404,27 @@ def seal_submitted(workspace: Path) -> dict[str, Any]:
     manifest = load_manifest(workspace / "evaluator" / "splits.json")
     if not selected_task_names(manifest, "sealed"):
         return {"genid": genid, "sealed": "not_configured"}
-    record = seal_agent_champion(workspace, genid)
-    if record is None:
-        return {"genid": genid, "sealed": "already complete"}
-    return {
-        "genid": genid,
-        "sealed": record.outcome.value,
-        "score": record.score,
-        "cost_usd": record.cost_usd,
-        "wall_s": record.wall_s,
-    }
+
+    def evaluate(selected: str) -> dict[str, Any]:
+        record = seal_agent_champion(workspace, selected)
+        if record is None:
+            return {"genid": selected, "sealed": "already complete"}
+        return {
+            "genid": selected,
+            "sealed": record.outcome.value,
+            "score": record.score,
+            "cost_usd": record.cost_usd,
+            "wall_s": record.wall_s,
+        }
+
+    if state.get("mode") == "continuous":
+        session = _read_json_object(workspace / SESSION_DIR / "manifest.json")
+        baseline = evaluate(session["baseline"]["genid"])
+        if baseline["sealed"] not in {"already complete", "benchmark_complete"}:
+            return {"baseline": baseline, "final": {"genid": genid, "sealed": "not_started"}}
+        final = baseline if session["baseline"]["genid"] == genid else evaluate(genid)
+        return {"baseline": baseline, "final": final}
+    return evaluate(genid)
 
 
 def _derive_status(workspace: Path, manifest: dict[str, Any], events: list[dict[str, Any]]) -> dict[str, Any]:

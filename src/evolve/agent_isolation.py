@@ -201,15 +201,9 @@ def accept_isolated_return(workspace: Path, attempt_dir: Path) -> None:
             for name, mode in modes.items():
                 (staging / name).chmod(mode)
         staged.append((destination, staging))
-    for index, (destination, staging) in enumerate(staged):
-        if destination.is_symlink():
-            raise RuntimeError("isolated return destination cannot be a symlink")
-        if destination.exists():
-            destination.rename(attempt_dir / f"previous-{index}")
-        staging.rename(destination)
-    from .agent_queue import defer_action
+    from .agent_handoff import commit_handoff
 
-    defer_action(workspace, action)
+    commit_handoff(workspace, attempt_dir, staged, action)
 
 
 def _reject_constant(value: str) -> Any:

@@ -66,11 +66,20 @@ configuration is not rewritten.
 
 Role-specific defaults live in `containers/runtime-versions.env`; standalone
 Dockerfile, seed and controller defaults are checked against it by
-`tests/test_runtime_version_pins.py`. The setup helper builds the selected tag
-from the declared Dockerfile; Docker's matching layers provide caching. It does
-not skip the build merely because a local tag exists. An already prepared image
-can still be used by initializing and running an experiment without invoking
-setup. Custom recipes use the commands below with an explicit dataset path;
+`tests/test_runtime_version_pins.py`. The setup helper prefers an existing local
+image. It resolves the immutable image ID and runs an offline, read-only probe
+for required tools and the actual CLI version; a label alone is not accepted.
+A missing image is built. A mismatched image fails with an explicit `--rebuild`
+instruction, preserving the existing image until the user chooses replacement:
+
+```bash
+./scripts/setup_terminal_bench.sh gepa --rebuild
+```
+
+The validated image ID is printed for recording or pinning in the experiment.
+Validation confirms the tool/version contract, not complete environment equivalence.
+Skipping setup remains supported when the dataset and image are already prepared.
+Custom recipes use the commands below with an explicit dataset path;
 `run_recipe_demo.sh` accepts only the built-in profiles.
 
 ## 2. Check the recipe and run prospective preflight

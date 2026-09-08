@@ -194,3 +194,19 @@ def test_unpriced_isolated_candidate_prevents_new_actions_and_model_calls(tmp_pa
         drive_controller(w, ControllerConfig("must-not-be-executed", (), ControllerLimits(3)))
     assert controller_status(w)["attempts_used"] == 0
     assert controller_status(w)["total_observed_cost_usd"] is None
+
+
+def test_continuous_acceptance_evaluates_initial_and_final_candidates(tmp_path, monkeypatch):
+    from evolve.agent_driver import seal_submitted
+
+    w = research(tmp_path)
+    act(w, "finish", "finish_research", reason="complete")
+    state = session_status(w)
+    state["research"]["finish"]["champion"]["genid"] = "1"
+    monkeypatch.setattr("evolve.agent_driver.session_status", lambda _: state)
+    seen = []
+    monkeypatch.setattr("evolve.agent_driver.seal_agent_champion", lambda _, genid: seen.append(genid))
+    result = seal_submitted(w)
+    assert seen == ["0", "1"]
+    assert result["baseline"]["genid"] == "0"
+    assert result["final"]["genid"] == "1"

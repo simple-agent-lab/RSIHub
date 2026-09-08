@@ -30,33 +30,45 @@ def defer_action(workspace: Path, action: AgentAction) -> dict[str, Any]:
     workspace = workspace.resolve()
     root = workspace / SESSION_DIR
     with _session_lock(root):
-        state = session_status(workspace)
-        check_mode(action.kind, state)
-        if state["status"] not in {"active", "exhausted"} and not (
-            state["status"] == "paused" and action.kind in {"resume_research", "finish_research"}
-        ):
-            raise RuntimeError(f"cannot defer work while session is {state['status']}")
-        path = root / "deferred-action.json"
-        payload = {"id": action.action_id, "type": action.kind, **action.arguments}
-        for event in _read_events(root / "actions.jsonl"):
-            if event.get("action_id") == action.action_id and event.get("phase") == "started":
-                if event.get("action") != {"type": action.kind, **action.arguments}:
-                    raise RuntimeError("action ID already records a different request")
-        if path.exists():
-            previous = _read_json_object(path)
-            if previous["action"] == payload:
-                return previous
-            if previous["status"] != "completed":
-                raise RuntimeError("a deferred action already awaits execution")
-            if previous["action"]["id"] == action.action_id:
-                raise RuntimeError("deferred action ID cannot be reused with different arguments")
-        receipt = {"schema_version": 1, "status": "queued", "action": payload}
+        from .agent_handoff import assert_handoff_complete
+
+        assert_handoff_complete(workspace)
+        return _defer_action_locked(workspace, action)
+
+
+def _defer_action_locked(workspace: Path, action: AgentAction, *, validate_only: bool = False) -> dict[str, Any]:
+    root = workspace / SESSION_DIR
+    state = session_status(workspace)
+    check_mode(action.kind, state)
+    if state["status"] not in {"active", "exhausted"} and not (
+        state["status"] == "paused" and action.kind in {"resume_research", "finish_research"}
+    ):
+        raise RuntimeError(f"cannot defer work while session is {state['status']}")
+    path = root / "deferred-action.json"
+    payload = {"id": action.action_id, "type": action.kind, **action.arguments}
+    for event in _read_events(root / "actions.jsonl"):
+        if event.get("action_id") == action.action_id and event.get("phase") == "started":
+            if event.get("action") != {"type": action.kind, **action.arguments}:
+                raise RuntimeError("action ID already records a different request")
+    if path.exists():
+        previous = _read_json_object(path)
+        if previous["action"] == payload:
+            return previous
+        if previous["status"] != "completed":
+            raise RuntimeError("a deferred action already awaits execution")
+        if previous["action"]["id"] == action.action_id:
+            raise RuntimeError("deferred action ID cannot be reused with different arguments")
+    receipt = {"schema_version": 1, "status": "queued", "action": payload}
+    if not validate_only:
         _atomic_json(path, receipt)
-        return receipt
+    return receipt
 
 
 def drain_action(workspace: Path) -> bool:
     """Replay completed action receipts if a crash preceded queue acknowledgment."""
+    from .agent_handoff import recover_handoff
+
+    recover_handoff(workspace)
     path = workspace / SESSION_DIR / "deferred-action.json"
     if not path.exists():
         return False
@@ -162,6 +174,9 @@ def drive_controller(workspace: Path, config: ControllerConfig) -> dict[str, Any
         _atomic_json(manifest_path, expected)
         try:
             while True:
+                from .agent_handoff import recover_handoff
+
+                recover_handoff(workspace)
                 state = session_status(workspace)
                 if (workspace / SESSION_DIR / "controller/manifest.json").exists():
                     if controller_status(workspace)["pending_attempt"] is not None:

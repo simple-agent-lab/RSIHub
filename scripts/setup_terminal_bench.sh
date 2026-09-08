@@ -3,6 +3,8 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 RECIPE=${1:-}
+REBUILD=${2:-}
+[[ $# -le 2 && ( -z $REBUILD || $REBUILD == --rebuild ) ]] || { echo "usage: setup_terminal_bench.sh RECIPE [--rebuild]" >&2; exit 2; }
 CALLER=$PWD
 ASSET_ROOT=${EVOLVE_ASSET_DIR:-$ROOT/.evolve-assets/terminal-bench-2.0}
 [[ $ASSET_ROOT == /* ]] || ASSET_ROOT=$CALLER/$ASSET_ROOT
@@ -70,9 +72,26 @@ if [[ ! -d "$RAW_DATASET/terminal-bench" ]]; then
 fi
 uv run --frozen python scripts/examples/terminal_bench_smoke/prepare_dataset.py "$RAW_DATASET" "$DATASET"
 
-# Always resolve the declared Dockerfile; Docker reuses matching build layers.
-# A local tag or version label does not establish the expected base/toolchain.
-docker build "${BUILD_ARGS[@]}" -t "$IMAGE" "$IMAGE_CONTEXT"
+# Resolve once and probe the immutable local image, not its version label.
+IMAGE_ID=$(docker image inspect --format '{{.Id}}' "$IMAGE" 2>/dev/null || true)
+if [[ -z $IMAGE_ID || $REBUILD == --rebuild ]]; then
+  docker build "${BUILD_ARGS[@]}" -t "$IMAGE" "$IMAGE_CONTEXT"
+  IMAGE_ID=$(docker image inspect --format '{{.Id}}' "$IMAGE")
+fi
+[[ $IMAGE_ID =~ ^sha256:[a-f0-9]{64}$ ]] || { echo "cannot resolve a local image ID" >&2; exit 2; }
+PROBE='for tool in git python3 rg; do command -v "$tool" >/dev/null || exit 1; done; '
+if [[ $RUNTIME_KIND == codex ]]; then
+  PROBE+='command -v node >/dev/null; codex --version'
+  EXPECTED="codex-cli $IMAGE_VERSION"
+else
+  PROBE+="command -v uv >/dev/null; /root/.local/share/uv/tools/mini-swe-agent/bin/python -c 'import importlib.metadata; print(importlib.metadata.version(\"mini-swe-agent\"))'"
+  EXPECTED=$IMAGE_VERSION
+fi
+OBSERVED=$(docker run --rm --network none --read-only --entrypoint /bin/sh "$IMAGE_ID" -ec "$PROBE") || {
+  echo "image tool validation failed; use --rebuild to replace it" >&2; exit 2;
+}
+[[ $OBSERVED == "$EXPECTED" ]] || { echo "image version mismatch; use --rebuild to replace it" >&2; exit 2; }
+echo "Validated mutation image: $IMAGE ($IMAGE_ID), version $IMAGE_VERSION"
 
 echo "Terminal-Bench 2.0 setup is ready at $READY_DATASET"
 if [[ -e "$RECIPE" ]]; then

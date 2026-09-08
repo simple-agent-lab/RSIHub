@@ -37,6 +37,15 @@ def build_agent_app(guard) -> typer.Typer:
 
     @app.command()
     @guard
+    def prepare(workspace: Path = typer.Argument(Path("."))) -> None:
+        """Evaluate the development baseline, leaving sealed data for final acceptance."""
+        from .orchestration import prepare_agent_baseline
+
+        prepare_agent_baseline(workspace)
+        print(json.dumps({"baseline": "ready", "sealed": "not_evaluated"}))
+
+    @app.command()
+    @guard
     def start(
         workspace: Path = typer.Argument(Path(".")),
         max_actions: int = typer.Option(20, "--max-actions", min=1),

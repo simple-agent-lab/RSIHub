@@ -120,11 +120,13 @@ must not write evaluator truth, generation tags, or archive outcomes directly.
 ## Agent Driven control
 
 Start an Agent Driven session only after generation zero has a certified score
-and is a valid parent. Use the ordinary evaluator verb rather than driver run,
-because driver startup also creates the sealed baseline anchor:
+and is a valid parent. Use `agent prepare` for the research workflow: it evaluates
+the development baseline without reading sealed data. Ordinary `evolve run` keeps
+its existing startup behavior, including the sealed baseline anchor regardless of
+`anchor.final`. These are distinct workflows:
 
 ```bash
-./evolve eval . 0
+./evolve agent prepare .
 ./evolve agent start . \
   --max-actions 20 \
   --max-operator-calls 10 \
@@ -375,6 +377,23 @@ its completed action receipt. `publish_best` retains the active session;
 `finish_research` closes it. A paused session requires an explicit
 `resume_research` action before resuming its controller.
 
+After `finish_research`, `agent seal-submitted --confirm` evaluates both the
+session's initial baseline and the selected final candidate on the frozen sealed
+split. If they are the same candidate it evaluates once; already complete anchors
+are reused. A failed baseline acceptance stops before the final candidate, and
+retry reuses completed results. These final acceptance costs are outside the
+research action budget. `publish_best` never triggers sealed acceptance.
+
+An unfinished session owns the workspace even when paused or its process exits.
+Do not delete `runs/agent-driven/ACTIVE` to bypass the lock. For a paused session,
+submit a `resume_research` action and resume its controller, or submit
+`finish_research` to end it. For interrupted actions, inspect external effects and
+use `agent resolve-interrupted`; for interrupted controller attempts, reconcile
+usage with `agent resolve-controller-interrupted`. Then resume the persisted
+controller. Finishing clears ownership; ordinary driver runs can proceed again.
+A normal recipe-driven experiment that never starts an agent session is unaffected
+by this ownership rule.
+
 Research notes are ordinary files in `runs/agent-driven/notes/`; no memory
 schema or save action is imposed. These files survive method changes and
 rollbacks. Trusted action/usage receipts remain separate. Parse rejections
@@ -488,8 +507,21 @@ Edits require an existing managed child selected by a checkpoint, operator or
 commit request. The host validates paths and the declared mutable surface before
 importing these bytes. Only the typed request reaches the existing action queue;
 the container cannot write the queue or cost history itself. File edits remain
-ordinary non-transactional research changes; an interrupted acceptance requires
-inspection before resuming, rather than replaying an uncertain operation.
+journaled research changes. Before replacing host directories, the host persists
+`runs/agent-driven/return-handoff.json` with staging identities, backups and the
+action ID. Resume completes interrupted directory swaps and enqueues the same
+action once, then marks the handoff complete. Backups remain in the attempt
+folder. Changed/missing staging or unexpected destination contents stop recovery
+instead of overwriting unrelated edits. Do not manually edit these directories
+while a handoff is pending. This journal covers isolated controller imports;
+operator output imports have a separate lifecycle.
+
+A crash can still leave a controller attempt without its usage terminal receipt.
+Recovering files does not invent a billing value: inspect the attempt, use
+`agent resolve-controller-interrupted` with observed usage when required, then
+`agent resume-controller`. Resume recovers the import before launching more work.
+The journal and rename directories are flushed to disk; disk corruption or loss
+of journal/staging storage remains outside this recovery guarantee.
 
 This isolates the controller execution process. Candidate adapter isolation is
 configured separately below. Once the isolated controller manifest exists,

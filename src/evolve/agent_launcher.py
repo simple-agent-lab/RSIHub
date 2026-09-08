@@ -74,7 +74,10 @@ class ControllerConfig:
 def launch_controller(workspace: Path, config: ControllerConfig, *, deferred_actions: bool = False) -> dict[str, Any]:
     """Run one metered controller attempt and retain enough state to resume safely."""
 
+    from .agent_handoff import recover_handoff
+
     workspace = workspace.resolve()
+    recover_handoff(workspace)
     config.validate()
     if config.sandbox is not None and not deferred_actions:
         raise RuntimeError("isolated controllers require deferred action transport")

@@ -923,8 +923,6 @@ def _ensure_genesis_evaluated(workspace: Path) -> None:
 
 
 def _ensure_genesis_anchor_evaluated(workspace: Path) -> None:
-    if evaluator_anchor(workspace).get("final") is not True:
-        return
     manifest = load_manifest(workspace / "evaluator" / "splits.json")
     if not selected_task_names(manifest, "sealed"):
         return
