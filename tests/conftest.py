@@ -24,7 +24,7 @@ from evolve.workspace import init_workspace as create_workspace
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_RECIPES = ROOT / "tests" / "fixtures" / "recipes"
 FIXTURE_SEEDS = ROOT / "tests" / "fixtures" / "seeds"
-UV_SOURCE_RECIPES = {"ahe", "hill_climb", "hyperagents"}
+UV_SOURCE_RECIPES = {"ahe", "hill_climb", "hyperagents", "hyperagents_tbench_full"}
 
 
 class _FixtureRegistryClient:
@@ -348,3 +348,13 @@ def append_archive_event(workspace: Path, evolve_home: Path, event: dict[str, ob
     mirror = mirror_path(workspace.name, workspace)
     with mirror.open("a") as archive:
         archive.write(line)
+
+
+def research_method(workspace: Path) -> Path:
+    """Minimal explicit optimizer input for research mechanism tests."""
+    method = workspace.parent / (workspace.name + "-method")
+    method.mkdir(exist_ok=True)
+    (method / "instructions.md").write_text(
+        "Use evidence to improve the candidate; publish progress, then finish research.\n"
+    )
+    return method

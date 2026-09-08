@@ -376,6 +376,44 @@
     },
     "validate": {}
   },
+  "hyperagents_tbench_full": {
+    "analyze": {
+      "history_cycles": 2,
+      "max_chars": 30000,
+      "max_observations": 30
+    },
+    "gate": {},
+    "mutate": {
+      "agent": "evolve.integrations.harbor.miniswe_task_file:InstalledMiniSweAgent",
+      "agent_kwargs": {
+        "cost_limit": 0,
+        "max_tokens": 64000,
+        "reasoning_effort": "high"
+      },
+      "editable_roots": [
+        "target",
+        "operators"
+      ],
+      "environment": "docker",
+      "expose_gate_data": false,
+      "image": "evolve-mutate-app:20260724-tools-mswe245",
+      "max_retries": 1,
+      "memory_dir": "target/memory",
+      "model": "openai/gpt-5.4-2026-03-05",
+      "prompt_path": "target/src/minisweagent/config/mini.yaml",
+      "runner": "harbor",
+      "skills_dir": "target/skills"
+    },
+    "record": {},
+    "rollout": {
+      "field_limit": 2000,
+      "pass_threshold": 1.0
+    },
+    "select": {
+      "seed": 0
+    },
+    "validate": {}
+  },
   "hyperagents_codex": {
     "analyze": {
       "history_cycles": 2,
@@ -406,6 +444,51 @@
     "rollout": {
       "field_limit": 2000,
       "pass_threshold": 1.0
+    },
+    "select": {
+      "seed": 0
+    },
+    "validate": {}
+  },
+  "hyperagents_codex_tbench_full": {
+    "analyze": {
+      "history_cycles": 2,
+      "max_chars": 30000,
+      "max_observations": 30
+    },
+    "gate": {},
+    "mutate": {
+      "agent": "codex",
+      "agent_kwargs": {
+        "reasoning_effort": "high",
+        "version": "0.149.0"
+      },
+      "editable_roots": [
+        "target",
+        "operators"
+      ],
+      "environment": "docker",
+      "expose_gate_data": false,
+      "image": "evolve-mutate-codex:20260904-codex0149",
+      "max_retries": 1,
+      "memory_dir": "target/memory",
+      "model": "gpt-5.4",
+      "prompt_path": "target/prompt.md",
+      "runner": "harbor",
+      "skills_dir": "target/skills"
+    },
+    "record": {},
+    "rollout": {
+      "agent_setup_timeout_multiplier": 1.0,
+      "agent_timeout_multiplier": 1.0,
+      "budget_tasks": 50,
+      "field_limit": 2000,
+      "max_retries": 1,
+      "n_concurrent": 5,
+      "pass_threshold": 1.0,
+      "reuse_completed": false,
+      "seed": 0,
+      "task_sampling": "head"
     },
     "select": {
       "seed": 0

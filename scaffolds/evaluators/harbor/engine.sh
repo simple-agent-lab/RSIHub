@@ -129,7 +129,6 @@ PY
   export EVOLVE_HARBOR_TASK_FILE
 fi
 : "${EVOLVE_UV_CACHE_DIR:=$HOME/.evolve/uv-cache}"
-runtime_mounts=${EVOLVE_CANDIDATE_RUNTIME_MOUNTS_JSON:-}
 runtime_env=${EVOLVE_CANDIDATE_RUNTIME_ENV_JSON:-}
 evaluator_runtime_env=
 if [ -f evaluator/prepare-runtime.sh ]; then
@@ -147,39 +146,28 @@ if [ -f evaluator/prepare-runtime.sh ]; then
     exit 3
   fi
 fi
-if [ -z "$runtime_mounts" ]; then
-  mkdir -p "$EVOLVE_UV_CACHE_DIR"
-  runtime_mounts=$(python3 -c 'import json,sys; print(json.dumps([{"type":"bind","source":sys.argv[1],"target":"/opt/evolve/uv/cache"}]))' "$EVOLVE_UV_CACHE_DIR")
-fi
 [ -n "$runtime_env" ] || runtime_env='{}'
-if ! python3 - "$runtime_env" "$runtime_mounts" "$EVOLVE_RUN_DIR" <<'PY'
+if ! "$EVOLVE_FRAMEWORK_PYTHON" - "$runtime_env" "$EVOLVE_RUN_DIR" "$EVOLVE_UV_CACHE_DIR" <<'PYPLAN'
 import json
+import os
 import sys
 from pathlib import Path
+from evolve.integrations.harbor._runtime_plan import resolve_mounts, write_compose_plan, write_mount_plan
 
 environment = json.loads(sys.argv[1])
-mounts = json.loads(sys.argv[2])
 if not isinstance(environment, dict):
     raise SystemExit("candidate runtime environment must be an object")
-if not isinstance(mounts, list) or any(not isinstance(mount, dict) for mount in mounts):
-    raise SystemExit("candidate runtime mounts must be a list of objects")
-for mount in mounts:
-    if (
-        mount.get("type") != "bind"
-        or not isinstance(mount.get("source"), str)
-        or not isinstance(mount.get("target"), str)
-        or not isinstance(mount.get("read_only", False), bool)
-    ):
-        raise SystemExit("invalid candidate runtime mount")
+mounts = resolve_mounts(os.environ, Path(sys.argv[3]))
 entries = []
 for key, value in sorted(environment.items()):
     if not isinstance(key, str) or not isinstance(value, str) or "\n" in key + value or "=" in key:
         raise SystemExit("invalid candidate runtime environment entry")
     entries.append(f"{key}={value}")
-run_dir = Path(sys.argv[3])
+run_dir = Path(sys.argv[2])
 (run_dir / "candidate-runtime.env").write_text("\n".join(entries) + ("\n" if entries else ""))
-(run_dir / "candidate-runtime.mounts.json").write_text(json.dumps(mounts, separators=(",", ":")))
-PY
+write_mount_plan(run_dir, mounts)
+write_compose_plan(run_dir, os.environ)
+PYPLAN
 then
   printf 'infra_failed\n' > "$EVOLVE_RUN_DIR/status"
   exit 3
@@ -298,6 +286,9 @@ if [ -f evaluator/agent.kwargs ]; then
 fi
 set -- "$@" --ae "EVOLVE_CANDIDATE_SOURCE=$PWD/target"
 set -- "$@" --mounts "$runtime_mounts"
+while IFS= read -r compose_overlay; do
+  set -- "$@" --extra-docker-compose "$compose_overlay"
+done < "$EVOLVE_RUN_DIR/candidate-runtime.compose-paths"
 if [ "${EVOLVE_HARBOR_CODEX_SUBSCRIPTION:-0}" != "1" ]; then
   for credential_name in OPENAI_API_KEY OPENAI_BASE_URL OPENAI_API_BASE; do
     eval "credential_value=\${$credential_name-}"

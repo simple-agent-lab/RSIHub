@@ -21,8 +21,7 @@ def test_real_recipe_binds_harbor_rollout_analyze_and_hyperagents_mutate() -> No
 
     materialized = materialize_operators(bindings)
     harbor_runtime = str(materialized.files["library/_shared/harbor/rollout.py"])
-    assert '"target": "/opt/evolve/uv/cache"' in harbor_runtime
-    assert '"target": "/installed-agent/uv-cache"' not in harbor_runtime
+    assert "from evolve.integrations.harbor._runtime_plan import " in harbor_runtime
     assert "library/_shared/harbor/__init__.py" in materialized.files
     assert "library/_shared/harbor/config.py" in materialized.files
     assert "library/_shared/harbor/evidence.py" in materialized.files

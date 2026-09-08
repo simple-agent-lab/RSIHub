@@ -34,6 +34,9 @@ class FakeCodex:
     def build_cli_flags(self) -> str:
         return ""
 
+    def render_instruction(self, instruction: str) -> str:
+        return instruction
+
     def _build_register_skills_command(self) -> str | None:
         return "register-base-skills"
 
@@ -122,6 +125,7 @@ def test_builtin_codex_wrapper_injects_skills_and_opt_in_compaction(tmp_path: Pa
         env={"EVAL_STUB": "1", "EVOLVE_HOME": str(tmp_path / "home")},
     )
     assert result.returncode == 0, result.stderr
+    assert not (workspace / "target" / "__pycache__").exists()
     _install_fake_harbor(monkeypatch)
     module = _load_target_agent(workspace / "target" / "agent.py")
 
@@ -444,3 +448,49 @@ def test_builtin_codex_wrapper_isolates_candidate_root_per_instance(tmp_path: Pa
     asyncio.run(second.setup(second_environment))
     assert first_environment.uploads == [(first_skills, "/tmp/evolve-target-skills")]
     assert second_environment.uploads == [(second_skills, "/tmp/evolve-target-skills")]
+
+
+def test_codex_deadline_counts_setup_before_model_call(tmp_path, monkeypatch):
+    import json
+
+    _install_fake_harbor(monkeypatch)
+    module = _load_target_agent(Path(__file__).resolve().parents[1] / "seeds/codex/agent.py")
+    (tmp_path / "config.json").write_text(
+        json.dumps(
+            {
+                "agent": {"override_timeout_sec": 100},
+                "timeout_multiplier": 1,
+            }
+        )
+    )
+    agent = module.HarborAgent(logs_dir=tmp_path / "agent")
+    monkeypatch.setattr(module.time, "time", lambda: 1000)
+    prompt = agent.render_instruction("Solve the task")
+    assert "100 seconds" in prompt
+    assert "EVOLVE_AGENT_DEADLINE_UNIX" in prompt
+    monkeypatch.setattr(module.time, "time", lambda: 1030)
+    command = asyncio.run(agent.exec_as_agent(object(), "codex exec -- task"))
+    assert "EVOLVE_AGENT_DEADLINE_UNIX=1100.000000" in command
+    assert "1130" not in command
+    assert asyncio.run(agent.exec_as_agent(object(), "setup")) == "setup"
+    (tmp_path / "config.json").unlink()
+    assert "time limit: unavailable" in agent.render_instruction("Another task")
+    command = asyncio.run(agent.exec_as_agent(object(), "codex exec -- task"))
+    assert "unset EVOLVE_AGENT_DEADLINE_UNIX" in command
+    assert "1100.000000" not in command
+
+
+def test_codex_missing_budget_does_not_invent_a_deadline(tmp_path, monkeypatch):
+    _install_fake_harbor(monkeypatch)
+    module = _load_target_agent(Path(__file__).resolve().parents[1] / "seeds/codex/agent.py")
+    agent = module.HarborAgent(logs_dir=tmp_path / "agent")
+    assert "time limit: unavailable" in agent.render_instruction("Task")
+    command = asyncio.run(agent.exec_as_agent(object(), "codex exec -- task"))
+    assert "EVOLVE_AGENT_DEADLINE_UNIX=" not in command
+
+
+def test_explicit_evaluator_version_overrides_codex_seed_default(tmp_path: Path, monkeypatch) -> None:
+    _install_fake_harbor(monkeypatch)
+    module = _load_target_agent(Path(__file__).resolve().parents[1] / "seeds/codex/agent.py")
+    agent = module.HarborAgent(logs_dir=tmp_path / "logs", version="0.150.0")
+    assert agent.kwargs["version"] == "0.150.0"

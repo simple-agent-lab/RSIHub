@@ -8,7 +8,10 @@ from evolve.config import recipe_root
 from evolve.preflight import PreflightStatus, run_preflight
 
 
-@pytest.mark.parametrize("recipe", ["aevolve", "ahe", "gepa", "hyperagents"])
+@pytest.mark.parametrize(
+    "recipe",
+    ["aevolve", "ahe", "gepa", "hyperagents", "hyperagents_codex_tbench_full", "hyperagents_tbench_full"],
+)
 def test_partner_recipe_runtime_conformance(
     tmp_path: Path,
     recipe: str,
@@ -42,7 +45,7 @@ def test_partner_recipe_runtime_conformance(
 
 
 def test_builtin_recipes_declare_runtime_only_for_candidate_preparation() -> None:
-    expected = {"ahe", "hill_climb", "hyperagents"}
+    expected = {"ahe", "hill_climb", "hyperagents", "hyperagents_tbench_full"}
     configured = set()
     for recipe in recipe_root().iterdir():
         path = recipe / "evolve.yaml"

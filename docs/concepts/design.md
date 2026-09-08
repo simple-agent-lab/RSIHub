@@ -27,7 +27,16 @@ seed on the configured primary split (normally `gate`) and then evaluates the
 same snapshot on the complete non-empty `sealed` split. The sealed result is a
 non-selectable `anchor`, is stored as auxiliary evidence, and is excluded from
 the mutation feedback projection. Generation one cannot begin until both
-required evaluations complete.
+required evaluations complete. `anchor.final` controls the final anchor only.
+
+Agent Driven has one continuous research lifecycle: publish a certified best
+without stopping, or explicitly finish research. There is no batch mode.
+
+The separate research workflow begins with `evolve agent prepare`: certify the
+primary development baseline without reading sealed data, then start the agent
+session. Continuous research publishes intermediate candidates without sealed
+evaluation. After research finishes, explicit sealed acceptance evaluates the
+initial baseline and selected final candidate on the same frozen split.
 
 ## Recipe-driven initialization
 
@@ -47,9 +56,17 @@ recipe YAML
 ```
 
 The framework ships `aevolve`, `ahe`, `ahe_codex`, `gepa`, `gepa_local`,
-`hill_climb`, `hill_climb_codex`, `hyperagents`, and `hyperagents_codex`.
+`hill_climb`, `hill_climb_codex`, `hyperagents`, `hyperagents_codex`, and
+the full-benchmark profiles `hyperagents_tbench_full` and
+`hyperagents_codex_tbench_full`.
 Development smoke recipes live under `tests/fixtures/recipes/` and are not part
 of the public recipe inventory.
+
+Harbor rollouts publish a versioned, facts-only runtime state artifact alongside
+the method-neutral cases. The feedback bundle makes train-role state available
+to mutators without adding a planner, diagnostic replay, or other algorithmic
+stage. The publisher records provenance and explicit unavailability; it does
+not convert runtime observations into diagnoses or mutation recommendations.
 
 ## Declarative operator configuration
 

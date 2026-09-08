@@ -12,6 +12,8 @@ EXPECTED_OPERATOR_VARIANTS = {
     "ahe": ("ahe_latest", "parent_evaluation", "ahe", "ahe_artifact_valid"),
     "gepa": ("pareto", "harbor", "gepa", "parent_eligible"),
     "hyperagents": ("score_child_prop", "parent_evaluation", "hyperagents", "parent_eligible"),
+    "hyperagents_codex_tbench_full": ("score_child_prop", "harbor", "hyperagents", "parent_eligible"),
+    "hyperagents_tbench_full": ("score_child_prop", "parent_evaluation", "hyperagents", "parent_eligible"),
 }
 
 
@@ -22,6 +24,8 @@ EXPECTED_OPERATOR_VARIANTS = {
         ("ahe", True, ["target/**"]),
         ("gepa", False, ["target/**"]),
         ("hyperagents", True, ["target/**", "operators/**"]),
+        ("hyperagents_codex_tbench_full", False, ["target/**", "operators/**"]),
+        ("hyperagents_tbench_full", True, ["target/**", "operators/**"]),
     ],
 )
 def test_all_partner_recipes_resolve_the_same_automatic_contract_schema(

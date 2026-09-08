@@ -18,6 +18,7 @@ from evolve.trace_analysis import (
 )
 from library._shared.harbor import evidence as harbor_evidence
 from library._shared.harbor import execution as harbor_execution
+from library._shared.harbor import state as harbor_state
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -121,6 +122,77 @@ def test_harbor_rollout_distinguishes_task_agent_and_infra_failures(tmp_path: Pa
     assert "json-secret" not in harbor_evidence._redact('{"OPENAI_API_KEY":"json-secret"}')
 
 
+def test_harbor_state_publishes_raw_facts_without_diagnosis(tmp_path: Path) -> None:
+    jobs = tmp_path / "runs" / "harbor-rollouts" / "gen-1"
+    trial = _write_trial(
+        jobs,
+        name="task-failed",
+        reward=0,
+        exception_type="AgentTimeoutError",
+        exception_message="Agent execution timed out",
+    )
+    result_path = trial / "result.json"
+    result = json.loads(result_path.read_text())
+    result.update(
+        {
+            "started_at": "2026-01-01T00:00:00Z",
+            "finished_at": "2026-01-01T00:20:00Z",
+            "config": {
+                "agent_timeout_multiplier": 1.0,
+                "environment": {
+                    "type": "docker",
+                    "cpu_enforcement_policy": "auto",
+                    "memory_enforcement_policy": "auto",
+                    "override_cpus": None,
+                    "override_memory_mb": None,
+                },
+            },
+        }
+    )
+    result_path.write_text(json.dumps(result))
+    task = tmp_path / "tasks" / "task-failed"
+    task.mkdir(parents=True)
+    (task / "task.toml").write_text(
+        "[agent]\ntimeout_sec = 1200\n[verifier]\ntimeout_sec = 1200\n"
+        '[environment]\ncpus = 1\nmemory = "2G"\nstorage = "10G"\nbuild_timeout_sec = 600\n'
+    )
+    cases = harbor_evidence.collect_cases(jobs, tasks_dir=tmp_path / "tasks")
+
+    state = harbor_state.build_harbor_state(
+        cases,
+        jobs_dir=jobs,
+        tasks_dir=tmp_path / "tasks",
+        workspace=tmp_path,
+        generation="1",
+        role="train",
+        harbor_returncode=0,
+    )
+
+    assert state["schema_version"] == 1
+    assert state["source"]["role"] == "train"
+    assert state["batch"] == {"harbor_returncode": 0, "tasks_observed": 1}
+    assert state["source"]["jobs_root"]["path"] == "runs/harbor-rollouts/gen-1"
+    [published] = state["tasks"]
+    assert published["harbor"]["outcome"] == "failed"
+    assert published["harbor"]["exception"]["type"] == "AgentTimeoutError"
+    assert published["declared_task"]["environment"] == {
+        "build_timeout_sec": 600,
+        "cpus": 1,
+        "memory": "2G",
+        "storage": "10G",
+    }
+    assert published["harbor"]["configuration"]["environment"]["override_cpus"] is None
+    assert published["container_runtime"]["status"] == "unavailable"
+    assert published["command_events"]["commands"][0]["arguments"] == '{"command": "run tests"}'
+    assert published["artifacts"]["harbor_result"] == {
+        "status": "available",
+        "path": "task-failed/result.json",
+    }
+    serialized = json.dumps(state)
+    assert "diagnosis" not in serialized
+    assert "recommend" not in serialized
+
+
 def test_harbor_rollout_promotes_artifact_rubric_evidence(tmp_path: Path) -> None:
     jobs = tmp_path / "jobs"
     trial = _write_trial(jobs, name="poster-task", reward=0.75)
@@ -156,7 +228,36 @@ def test_harbor_rollout_promotes_artifact_rubric_evidence(tmp_path: Path) -> Non
     assert case["execution"] == {
         "trajectory_available": False,
         "trajectory": {"format": "atif", "status": "missing"},
+        "time_budget": {
+            "status": "unavailable",
+            "reason": "agent limit metadata missing or invalid",
+            "elapsed_s": 2.0,
+            "timed_out": False,
+        },
     }
+
+
+def test_replay_keeps_native_time_budget_without_replacing_replayed_reward(tmp_path):
+    jobs = tmp_path / "jobs"
+    trial = _write_trial(jobs, name="budget", reward=0, exception_type="AgentTimeoutError")
+    payload = json.loads((trial / "result.json").read_text())
+    payload["config"] = {"agent": {"override_timeout_sec": 2}, "timeout_multiplier": 1}
+    (trial / "result.json").write_text(json.dumps(payload))
+    (trial / "evolve-replay.json").write_text(
+        json.dumps(
+            {
+                "task_name": "harbor/budget",
+                "trial_name": "budget",
+                "verifier_result": {"rewards": {"reward": 1}},
+                "exception_info": {"exception_type": "AgentTimeoutError"},
+            }
+        )
+    )
+    [case] = harbor_evidence.collect_cases(jobs)
+    assert case["reward"] == 1
+    assert case["execution"]["time_budget"]["fraction_used"] == 1
+    assert case["execution"]["time_budget"]["timed_out"] is True
+    assert case["timing_s"]["agent_execution"] == 2
 
 
 def test_harbor_rollout_references_workspace_atif_without_copying_it(tmp_path: Path) -> None:
@@ -286,10 +387,11 @@ def test_harbor_rollout_reuses_only_a_complete_explicitly_enabled_stage(
         "tasks_observed": 1,
         "infra_tasks": ["task-a"],
     }
-    artifacts = ["rollout/harbor.log", "rollout/cases.json"]
+    artifacts = ["rollout/harbor.log", "rollout/cases.json", "rollout/harbor-state.json"]
     (rollout / "summary.json").write_text(json.dumps(summary))
     (rollout / "artifacts.json").write_text(json.dumps(artifacts))
     (rollout / "cases.json").write_text(json.dumps([{"task_name": "task-a"}]))
+    (rollout / "harbor-state.json").write_text(json.dumps({"schema_version": 1}))
     ctx = OperatorContext(
         workspace=tmp_path,
         checkout=tmp_path,
@@ -458,6 +560,17 @@ def test_feedback_bundle_exposes_current_rollout_to_mutator(tmp_path: Path) -> N
     run_dir = workspace / "runs" / "gen-1"
     (run_dir / "analyze").mkdir(parents=True)
     (run_dir / "analyze" / "feedback.md").write_text("# Trace Analysis Feedback\n\nfailed task evidence\n")
+    (run_dir / "rollout").mkdir()
+    (run_dir / "rollout" / "harbor-state.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "source": {"kind": "harbor_rollout", "generation": "1", "role": "train"},
+                "semantics": {"facts_only": True},
+                "tasks": [],
+            }
+        )
+    )
 
     manifest = write_feedback_bundle(workspace=workspace, run_dir=run_dir)
 
@@ -465,6 +578,30 @@ def test_feedback_bundle_exposes_current_rollout_to_mutator(tmp_path: Path) -> N
     assert copied.read_text().endswith("failed task evidence\n")
     assert "[current trace analysis](failures/analyze.md)" in (run_dir / "feedback" / "index.md").read_text()
     assert "feedback/failures/analyze.md" in manifest
+    assert "feedback/evidence/harbor-state.json" in manifest
+    assert (run_dir / "feedback" / "evidence" / "harbor-state.json").is_file()
+    assert "[raw Harbor runtime state](evidence/harbor-state.json)" in (run_dir / "feedback" / "index.md").read_text()
+
+
+def test_feedback_bundle_does_not_expose_non_train_harbor_state(tmp_path: Path) -> None:
+    workspace, _ = init_workspace(tmp_path)
+    run_dir = workspace / "runs" / "gen-1"
+    rollout = run_dir / "rollout"
+    rollout.mkdir(parents=True)
+    (rollout / "harbor-state.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "source": {"kind": "harbor_rollout", "generation": "1", "role": "dedicated"},
+                "tasks": [{"task_name": "not-frozen-train"}],
+            }
+        )
+    )
+
+    manifest = write_feedback_bundle(workspace=workspace, run_dir=run_dir)
+
+    assert "feedback/evidence/harbor-state.json" not in manifest
+    assert not (run_dir / "feedback" / "evidence" / "harbor-state.json").exists()
 
 
 def test_analyze_operators_share_raw_harbor_facts(tmp_path: Path) -> None:
@@ -680,3 +817,110 @@ def test_feedback_history_uses_analyze_operator_key(tmp_path: Path) -> None:
     index = (run_dir / "feedback" / "index.md").read_text()
     assert "[selected trace evidence](evidence/selected.md)" in index
     assert "[current trace analysis]" not in index
+
+
+def test_harbor_cancel_request_allows_graceful_cleanup(tmp_path: Path) -> None:
+    import sys
+    import threading
+    import time
+
+    log = tmp_path / "harbor.log"
+    ready = tmp_path / "ready"
+    cleaned = tmp_path / "cleaned"
+    script = tmp_path / "worker.py"
+    script.write_text(
+        "import signal,time,sys\nfrom pathlib import Path\n"
+        f"def stop(*_):\n Path({str(cleaned)!r}).touch()\n sys.exit(0)\n"
+        "signal.signal(signal.SIGTERM,stop)\n"
+        f"Path({str(ready)!r}).touch()\n"
+        "while True: time.sleep(.1)\n"
+    )
+
+    def request_cancel():
+        for _ in range(100):
+            if ready.exists():
+                log.with_suffix(".cancel").touch()
+                return
+            time.sleep(0.02)
+
+    thread = threading.Thread(target=request_cancel)
+    thread.start()
+    code = harbor_execution._run_harbor([sys.executable, str(script)], tmp_path, log, dict(os.environ))
+    thread.join()
+    assert code == 130
+    assert cleaned.exists()
+    state = json.loads(log.with_suffix(".status.json").read_text())
+    assert state["status"] == "cancelled"
+    assert state["forced_termination"] is False
+
+
+def test_harbor_existing_partial_results_are_not_deleted(tmp_path: Path) -> None:
+    jobs = tmp_path / "jobs"
+    jobs.mkdir()
+    evidence = jobs / "result.json"
+    evidence.write_text("partial evidence")
+    with pytest.raises(RuntimeError, match="already contains evidence"):
+        harbor_execution._reset_directory(jobs)
+    assert evidence.read_text() == "partial evidence"
+
+
+@pytest.mark.parametrize("returncode", [124, 125, 130])
+def test_interrupted_harbor_batch_cannot_be_reported_as_completed(returncode: int, tmp_path: Path) -> None:
+    with pytest.raises(SystemExit, match="interrupted"):
+        harbor_evidence.require_rollout_cases(
+            [{"reward": 0, "outcome": "failed"}], returncode=returncode, harbor_log=tmp_path / "harbor.log"
+        )
+
+
+def test_trial_limit_stops_process_and_preserves_results(tmp_path: Path) -> None:
+    import sys
+
+    jobs = tmp_path / "jobs"
+    result = jobs / "job" / "trial" / "result.json"
+    result.parent.mkdir(parents=True)
+    cleaned = tmp_path / "cleaned"
+    log = tmp_path / "harbor.log"
+    script = tmp_path / "worker.py"
+    script.write_text(
+        "import signal,time,sys,json\nfrom pathlib import Path\n"
+        f"def stop(*_):\n Path({str(cleaned)!r}).touch()\n sys.exit(0)\n"
+        "signal.signal(signal.SIGTERM,stop)\n"
+        f"Path({str(result)!r}).write_text(json.dumps({{'finished_at':'now','exception_info':{{'exception_type':'NetworkError'}}}}))\n"
+        "while True: time.sleep(.1)\n"
+    )
+    code = harbor_execution._run_harbor(
+        [sys.executable, str(script)],
+        tmp_path,
+        log,
+        dict(os.environ),
+        jobs_dir=jobs,
+        stop_limits={"errors": 1},
+    )
+    assert code == 125
+    assert cleaned.exists() and result.exists()
+    state = json.loads(log.with_suffix(".status.json").read_text())
+    assert state["status"] == "trial_limit"
+    assert state["stop_evidence"]["counts"] == {"errors": 1, "failures": 0}
+    assert not state["forced_termination"]
+
+
+def test_trial_limits_do_not_turn_missing_or_partial_rewards_into_failures(tmp_path: Path) -> None:
+    jobs = tmp_path / "jobs"
+    for i, result in enumerate(
+        [
+            {"finished_at": "now", "verifier_result": {"rewards": {"reward": None}}},
+            {"finished_at": "now", "verifier_result": {"rewards": {}}},
+            {"finished_at": None, "verifier_result": {"rewards": {"reward": 0}}},
+            {"finished_at": "now", "verifier_result": {"rewards": {"reward": 1}}},
+        ]
+    ):
+        path = jobs / "job" / str(i) / "result.json"
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps(result))
+    assert harbor_execution._trial_stop_reason(jobs, {"failures": 1}) is None
+    path = jobs / "job" / "zero" / "result.json"
+    path.parent.mkdir()
+    path.write_text(json.dumps({"finished_at": "now", "verifier_result": {"rewards": {"reward": 0}}}))
+    reason = harbor_execution._trial_stop_reason(jobs, {"failures": 1})
+    assert reason["counts"] == {"errors": 0, "failures": 1}
+    assert reason["reached"] == ["failures"]

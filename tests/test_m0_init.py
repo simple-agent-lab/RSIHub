@@ -29,6 +29,8 @@ MINISWE_REVISION = "388da74aad620a384ab47669b17c52133e30e7c3"
         ("gepa", False),
         ("hill_climb", True),
         ("hyperagents", True),
+        ("hyperagents_codex_tbench_full", False),
+        ("hyperagents_tbench_full", True),
     ],
 )
 def test_init_generates_canonical_resolved_runtime(tmp_path: Path, recipe: str, managed_candidate: bool) -> None:

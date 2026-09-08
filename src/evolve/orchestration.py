@@ -17,7 +17,10 @@ from .doctor import ensure_evaluator_ready
 from .driver import (
     _assert_child_worktree_for_parent,
     _assert_valid_parent,
+    _ensure_genesis_evaluated,
+    _evaluate_once,
     _evaluation_pending_gate_record_genids,
+    _has_complete_anchor,
     _load_novelty_payload,
     _load_validate_payload,
     _operator_config_block,
@@ -61,10 +64,13 @@ def invoke_operator(
     config_override: dict[str, Any] | None = None,
     timeout_s: float | None = None,
     round_number: int | None = None,
+    operator_ref: str | None = None,
+    _agent_session: bool = False,
 ) -> OperatorInvocation:
     """Run one configured operator without handing it mechanism-owned state."""
 
     workspace = workspace.resolve()
+    _assert_agent_session_route(workspace, _agent_session)
     genid = _validate_genid(genid)
     _assert_invocation_route(name, parent)
     configured = operator_blocks(workspace)
@@ -82,32 +88,77 @@ def invoke_operator(
         if parent is not None:
             _assert_valid_parent(workspace, parent)
         with _invocation_checkout(workspace, name, checkout, parent) as selected_checkout:
-            _assert_operator_prerequisites(name, run_dir, configured)
-            _archive_active_outputs(name, run_dir)
-            result = _run_operator_guarded(
-                name=name,
-                checkout=selected_checkout,
-                workspace=workspace,
-                exp_id=exp_id,
-                genid=genid,
-                parent=parent,
-                run_dir=run_dir,
-                config_block=config,
-                timeout_s=effective_timeout,
-                round_number=round_number,
-            )
-            if result.returncode != 0:
-                raise RuntimeError(
-                    f"operator {name} failed with exit {result.returncode}: {_operator_failure_note(result)}"
+            with _operator_source_checkout(workspace, operator_ref) as operator_checkout:
+                return _invoke_selected_operator(
+                    workspace=workspace,
+                    name=name,
+                    genid=genid,
+                    parent=parent,
+                    selected_checkout=selected_checkout,
+                    operator_checkout=operator_checkout,
+                    configured=configured,
+                    config=config,
+                    effective_timeout=effective_timeout,
+                    run_dir=run_dir,
+                    exp_id=exp_id,
+                    round_number=round_number,
                 )
-            output_error = _operator_output_error(name, run_dir)
-            if output_error is not None:
-                raise RuntimeError(f"operator {name} produced invalid output: {_operator_output_note(output_error)}")
-            if name in {"validate", "novelty"}:
-                _write_candidate_receipt(workspace, selected_checkout, run_dir, name, str(parent))
-            if name == "analyze":
-                write_feedback_bundle(workspace=workspace, run_dir=run_dir)
+
+
+def _invoke_selected_operator(
+    *,
+    workspace: Path,
+    name: str,
+    genid: str,
+    parent: str | None,
+    selected_checkout: Path,
+    operator_checkout: Path | None,
+    configured: dict[str, Any],
+    config: dict[str, Any],
+    effective_timeout: float,
+    run_dir: Path,
+    exp_id: str,
+    round_number: int | None,
+) -> OperatorInvocation:
+    _assert_operator_prerequisites(name, run_dir, configured)
+    _archive_active_outputs(name, run_dir)
+    result = _run_operator_guarded(
+        name=name,
+        checkout=selected_checkout,
+        workspace=workspace,
+        exp_id=exp_id,
+        genid=genid,
+        parent=parent,
+        run_dir=run_dir,
+        config_block=config,
+        timeout_s=effective_timeout,
+        round_number=round_number,
+        operator_checkout=operator_checkout,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"operator {name} failed with exit {result.returncode}: {_operator_failure_note(result)}")
+    output_error = _operator_output_error(name, run_dir)
+    if output_error is not None:
+        raise RuntimeError(f"operator {name} produced invalid output: {_operator_output_note(output_error)}")
+    if name in {"validate", "novelty"}:
+        _write_candidate_receipt(workspace, selected_checkout, run_dir, name, str(parent))
+    if name == "analyze":
+        write_feedback_bundle(workspace=workspace, run_dir=run_dir)
     return OperatorInvocation(result=result, run_dir=run_dir, config=config)
+
+
+@contextmanager
+def _operator_source_checkout(workspace: Path, operator_ref: str | None) -> Iterator[Path | None]:
+    if operator_ref is None:
+        yield None
+        return
+    with tempfile.TemporaryDirectory(prefix="evolve-agent-operator-") as tempdir:
+        checkout = Path(tempdir) / "checkout"
+        add_worktree(workspace, checkout, operator_ref)
+        try:
+            yield checkout
+        finally:
+            remove_worktree(workspace, checkout)
 
 
 def _assert_invocation_route(name: str, parent: str | None) -> None:
@@ -222,8 +273,16 @@ def _write_candidate_receipt(
     )
 
 
-def finalize_child(workspace: Path, genid: str, *, parent: str | None = None) -> bool:
+def finalize_child(
+    workspace: Path,
+    genid: str,
+    *,
+    parent: str | None = None,
+    operator_ref: str | None = None,
+    _agent_session: bool = False,
+) -> bool:
     workspace = workspace.resolve()
+    _assert_agent_session_route(workspace, _agent_session)
     genid = _validate_genid(genid)
     with workspace_run_lock(workspace):
         exp_id = experiment_id(workspace)
@@ -240,19 +299,35 @@ def finalize_child(workspace: Path, genid: str, *, parent: str | None = None) ->
             raise RuntimeError(f"generation {genid} must be evaluated before finalize")
         if genid not in _evaluation_pending_gate_record_genids(workspace):
             return False
-        if not _run_gate_and_record(workspace, exp_id, genid, resolved_parent, operator_blocks(workspace)):
+        if not _run_gate_and_record(
+            workspace,
+            exp_id,
+            genid,
+            resolved_parent,
+            operator_blocks(workspace),
+            operator_ref=operator_ref,
+        ):
             raise RuntimeError(f"generation {genid} gate failed; fix the operator or runtime, then retry finalize")
         return True
 
 
-def fork_agent_child(workspace: Path, parent: str, child_worktree: Path) -> None:
+def fork_agent_child(workspace: Path, parent: str, child_worktree: Path, *, _agent_session: bool = False) -> None:
     workspace = workspace.resolve()
+    _assert_agent_session_route(workspace, _agent_session)
     with workspace_run_lock(workspace):
         fork_child(workspace, parent, child_worktree)
 
 
-def commit_agent_child(workspace: Path, child_worktree: Path, parent: str, genid: str) -> None:
+def commit_agent_child(
+    workspace: Path,
+    child_worktree: Path,
+    parent: str,
+    genid: str,
+    *,
+    _agent_session: bool = False,
+) -> None:
     workspace = workspace.resolve()
+    _assert_agent_session_route(workspace, _agent_session)
     with workspace_run_lock(workspace):
         parent_commit = _assert_valid_parent(workspace, parent)
         _assert_child_worktree_for_parent(workspace, child_worktree, parent, parent_commit)
@@ -291,17 +366,54 @@ def _assert_candidate_receipt(path: Path, expected_tree: str, name: str) -> None
         raise RuntimeError(f"candidate changed after {name}; rerun {name} before commit")
 
 
-def eval_agent_child(workspace: Path, genid: str, *, force: bool = False) -> EvaluationRecord | None:
+def eval_agent_child(
+    workspace: Path, genid: str, *, force: bool = False, _agent_session: bool = False
+) -> EvaluationRecord | None:
     workspace = workspace.resolve()
+    _assert_agent_session_route(workspace, _agent_session)
     with workspace_run_lock(workspace):
         ensure_evaluator_ready(workspace)
         return eval_child(workspace, genid, force=force)
 
 
-def record_agent_fields(workspace: Path, genid: str, fields: dict[str, object]) -> None:
+def seal_agent_champion(workspace: Path, genid: str) -> EvaluationRecord | None:
+    """Evaluate one submitted valid parent on sealed data outside the action loop."""
+
     workspace = workspace.resolve()
+    genid = _validate_genid(genid)
+    with workspace_run_lock(workspace):
+        _assert_valid_parent(workspace, genid)
+        row = rows_by_genid(workspace)[genid]
+        if _has_complete_anchor(row):
+            return None
+        return _evaluate_once(
+            workspace,
+            f"gen/{genid}",
+            genid,
+            purpose="anchor",
+            metadata={
+                "parent": row.get("parent"),
+                "mutated": row.get("mutated", []),
+                "surface_violations": row.get("surface_violations", []),
+                "note": "sealed evaluation after Agent Driven champion submission",
+                "kind": "anchor",
+            },
+            pending_gate_on_complete=False,
+        )
+
+
+def record_agent_fields(
+    workspace: Path, genid: str, fields: dict[str, object], *, _agent_session: bool = False
+) -> None:
+    workspace = workspace.resolve()
+    _assert_agent_session_route(workspace, _agent_session)
     with workspace_run_lock(workspace):
         record_fields(workspace, genid, fields)
+
+
+def _assert_agent_session_route(workspace: Path, allowed: bool) -> None:
+    if not allowed and (workspace / "runs/agent-driven/ACTIVE").is_file():
+        raise RuntimeError("Agent Driven session owns this workspace; use `evolve agent act`")
 
 
 def _merge_config(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -310,3 +422,16 @@ def _merge_config(base: dict[str, Any], override: dict[str, Any]) -> dict[str, A
         current = merged.get(key)
         merged[key] = _merge_config(current, value) if isinstance(current, dict) and isinstance(value, dict) else value
     return merged
+
+
+def prepare_agent_baseline(workspace: Path) -> None:
+    """Certify the development baseline without opening sealed data."""
+    workspace = workspace.resolve()
+    _assert_agent_session_route(workspace, False)
+    from .agent_driver import _sealed_evidence_exists
+
+    with workspace_run_lock(workspace):
+        if _sealed_evidence_exists(workspace):
+            raise RuntimeError("research preparation requires a fresh workspace without sealed evaluation")
+        ensure_evaluator_ready(workspace)
+        _ensure_genesis_evaluated(workspace)

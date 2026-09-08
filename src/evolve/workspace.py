@@ -52,6 +52,7 @@ _GIT_COMMIT = re.compile(r"[0-9a-fA-F]{40}")
 _GENERATED_EVALUATOR_PATHS = frozenset(
     {
         "evaluator/agent.env",
+        "evaluator/agent.kwargs",
         "evaluator/cleanup_harbor.py",
         "evaluator/dataset.pin",
         "evaluator/engines/local.sh",
@@ -283,7 +284,8 @@ def _write_files(
         ),
         "evaluator/agent.env": _agent_env(evaluator.get("agent_env")),
         "evaluator/verifier.env": _agent_env(evaluator.get("verifier_env")),
-        "evaluator/environment.kwargs": _environment_kwargs(evaluator.get("environment_kwargs")),
+        "evaluator/environment.kwargs": _runtime_kwargs(evaluator.get("environment_kwargs"), "environment_kwargs"),
+        "evaluator/agent.kwargs": _runtime_kwargs(evaluator.get("agent_kwargs"), "agent_kwargs"),
         "evaluator/splits.json": json.dumps(split_manifest, indent=2, sort_keys=True) + "\n",
         "evaluator/dataset.pin": _dataset_pin(evaluator_dataset, split_manifest),
         "evaluator/runtime.pin": f"{resolved_runtime.digest}\n",
@@ -497,6 +499,8 @@ def _write_target(workspace: Path, target_config: dict[str, Any]) -> None:
 def _copy_resource_tree(source: Traversable, destination: Path) -> None:
     destination.mkdir(parents=True, exist_ok=True)
     for entry in source.iterdir():
+        if entry.name == "__pycache__" or entry.name.endswith((".pyc", ".pyo")):
+            continue
         target = destination / entry.name
         if entry.is_dir():
             _copy_resource_tree(entry, target)
@@ -714,19 +718,19 @@ def _agent_env(value: object) -> str:
     return "".join(lines)
 
 
-def _environment_kwargs(value: object) -> str:
+def _runtime_kwargs(value: object, field: str) -> str:
     if value is None:
         return ""
     if not isinstance(value, dict):
-        raise ValueError("evaluator.environment_kwargs must be a mapping")
+        raise ValueError(f"evaluator.{field} must be a mapping")
     lines: list[str] = []
     for name in sorted(value):
         if not isinstance(name, str) or _ENV_NAME.fullmatch(name) is None:
-            raise ValueError(f"invalid evaluator.environment_kwargs name: {name!r}")
+            raise ValueError(f"invalid evaluator.{field} name: {name!r}")
         try:
             rendered = json.dumps(value[name], separators=(",", ":"), sort_keys=True)
         except (TypeError, ValueError) as exc:
-            raise ValueError(f"evaluator.environment_kwargs value for {name} must be JSON-serializable") from exc
+            raise ValueError(f"evaluator.{field} value for {name} must be JSON-serializable") from exc
         lines.append(f"{name}={rendered}\n")
     return "".join(lines)
 

@@ -3,10 +3,10 @@ import stat
 from pathlib import Path
 
 import pytest
-from conftest import git, init_workspace, smoke_agent_command
+from conftest import git, init_workspace, run_evolve, smoke_agent_command
 
 from evolve.archive import MECHANISM_EVAL_FIELD, read_events, rows_by_genid
-from evolve.driver import RunOptions, run
+from evolve.driver import RunOptions, _maybe_final_anchor, run
 from evolve.feedback import write_feedback_bundle
 
 
@@ -89,6 +89,45 @@ def test_run_evaluates_genesis_gate_and_private_sealed_anchor_once(tmp_path: Pat
     assert '"purpose": "anchor"' not in visible_feedback
 
 
+def test_ordinary_run_keeps_genesis_anchor_when_final_anchor_is_disabled(tmp_path: Path) -> None:
+    workspace = _lifecycle_workspace(
+        tmp_path,
+        {
+            "genesis": ["benchmark_complete"],
+            "anchor": ["benchmark_complete"],
+        },
+    )
+    config_path = workspace / "evolve.yaml"
+    config_path.write_text(config_path.read_text().replace("final: true", "final: false"))
+
+    run(RunOptions(workspace, max_generations=0))
+
+    assert [event["purpose"] for event in _evaluation_events(workspace, "0")] == ["genesis", "anchor"]
+
+
+def test_final_anchor_is_skipped_when_sealed_split_is_empty(tmp_path: Path) -> None:
+    workspace, evolve_home = init_workspace(tmp_path)
+    splits_path = workspace / "evaluator/splits.json"
+    splits = json.loads(splits_path.read_text())
+    splits["tasks"]["train"].extend(splits["tasks"]["sealed"])
+    splits["tasks"]["sealed"] = []
+    splits_path.write_text(json.dumps(splits) + "\n")
+    git(workspace, "add", "evaluator/splits.json")
+    git(workspace, "commit", "-m", "configure an empty sealed split")
+    git(workspace, "tag", "-f", "gen/0")
+    result = run_evolve(
+        "eval",
+        str(workspace),
+        "0",
+        env={"EVAL_STUB": "1", "EVOLVE_HOME": str(evolve_home)},
+    )
+    assert result.returncode == 0, result.stderr
+
+    _maybe_final_anchor(workspace, 1)
+
+    assert [event["purpose"] for event in _evaluation_events(workspace, "0")] == ["candidate"]
+
+
 def test_genesis_sealed_anchor_failure_stops_before_first_generation(tmp_path: Path) -> None:
     workspace = _lifecycle_workspace(
         tmp_path,
@@ -130,3 +169,25 @@ def test_candidate_infrastructure_failure_is_recorded_without_automatic_retry(
     assert "repaired_tasks" not in attempts[0]
     assert rows_by_genid(workspace)["1"]["attempt"] == 1
     assert rows_by_genid(workspace)["1"]["status"] == "infrastructure_failed"
+
+
+def test_agent_prepare_uses_development_only_then_continuous_seal_compares_baseline(tmp_path: Path) -> None:
+    from evolve.agent_driver import AgentLimits, execute_action, parse_action, seal_research, start_session
+    from evolve.orchestration import prepare_agent_baseline
+
+    workspace = _lifecycle_workspace(tmp_path, {"genesis": ["benchmark_complete"], "anchor": ["benchmark_complete"]})
+    prepare_agent_baseline(workspace)
+    prepare_agent_baseline(workspace)
+    assert [e["purpose"] for e in _evaluation_events(workspace, "0")] == ["genesis"]
+    method = tmp_path / "method"
+    method.mkdir()
+    (method / "instructions.md").write_text("research")
+    start_session(workspace, AgentLimits(10, 3, 3), optimizer=method, objective="improve")
+    with pytest.raises(RuntimeError, match="sealed evaluation requires"):
+        seal_research(workspace)
+    execute_action(workspace, parse_action({"id": "finish", "type": "finish_research", "reason": "complete"}))
+    result = seal_research(workspace)
+    assert result["baseline"]["sealed"] == "benchmark_complete"
+    assert result["final"] == result["baseline"]
+    assert seal_research(workspace)["final"]["sealed"] == "already complete"
+    assert [e["purpose"] for e in _evaluation_events(workspace, "0")] == ["genesis", "anchor"]

@@ -128,6 +128,8 @@ def workspace_run_lock(workspace: Path) -> Iterator[None]:
 def run(options: RunOptions) -> None:
     workspace = options.workspace.resolve()
     with workspace_run_lock(workspace):
+        if (workspace / "runs/agent-driven/ACTIVE").is_file():
+            raise RuntimeError("an Agent Driven session owns this workspace; submit its champion before driver run")
         ensure_evaluator_ready(workspace)
         _run_locked(options, workspace)
 
@@ -191,6 +193,9 @@ def _run_locked(options: RunOptions, workspace: Path) -> None:
 
 def _maybe_final_anchor(workspace: Path, generation: int) -> None:
     if generation <= 0 or evaluator_anchor(workspace).get("final") is not True:
+        return
+    manifest = load_manifest(workspace / "evaluator" / "splits.json")
+    if not selected_task_names(manifest, "sealed"):
         return
     candidates = ArchiveView(workspace).valid_parents()
     candidate = best_row(workspace) or max(
@@ -533,11 +538,15 @@ def _run_gate_and_record(
     operators_config: dict[str, Any],
     *,
     round_number: int | None = None,
+    operator_ref: str | None = None,
 ) -> bool:
     with tempfile.TemporaryDirectory(prefix=f"evolve-gate-{genid}-") as tempdir:
         checkout = Path(tempdir) / "checkout"
         add_worktree(workspace, checkout, f"gen/{genid}")
+        operator_checkout = Path(tempdir) / "operator" if operator_ref is not None else None
         try:
+            if operator_checkout is not None and operator_ref is not None:
+                add_worktree(workspace, operator_checkout, operator_ref)
             run_dir = _run_dir(workspace, genid)
             _write_gate_input(workspace, run_dir, genid, parent)
             gate_result = _run_operator_guarded(
@@ -551,6 +560,7 @@ def _run_gate_and_record(
                 config_block=_operator_config_block(operators_config, "gate"),
                 timeout_s=operator_timeout(operators_config, "gate"),
                 round_number=round_number,
+                operator_checkout=operator_checkout,
             )
             if gate_result.returncode != 0:
                 _append_operator_failed(
@@ -569,7 +579,7 @@ def _run_gate_and_record(
                     operators_config,
                     checkout,
                     round_number=round_number,
-                    operator_ref=f"gen/{genid}",
+                    operator_ref=operator_ref or f"gen/{genid}",
                 )
                 return False
             gate_payload, gate_error = _load_gate_payload(run_dir)
@@ -590,7 +600,7 @@ def _run_gate_and_record(
                     operators_config,
                     checkout,
                     round_number=round_number,
-                    operator_ref=f"gen/{genid}",
+                    operator_ref=operator_ref or f"gen/{genid}",
                 )
                 return False
 
@@ -608,6 +618,8 @@ def _run_gate_and_record(
             )
             return True
         finally:
+            if operator_checkout is not None and operator_checkout.exists():
+                remove_worktree(workspace, operator_checkout)
             remove_worktree(workspace, checkout)
             materialize_best_ever(workspace)
 

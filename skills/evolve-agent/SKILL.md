@@ -1,6 +1,6 @@
 ---
 name: evolve-agent
-description: "Run evidence-driven evolution of agents, prompts, skills, and agent harnesses. Use when asked to initialize or operate an evolution workspace, choose Hill Climb, A-Evolve, GEPA, AHE, or HyperAgents, invoke evolution operators directly, improve a candidate through repeated evaluation, analyze traces or lineage, recover interrupted evolution, or report an evidence-backed champion."
+description: "Run evidence-driven evolution of agents, prompts, skills, and agent harnesses. Use when asked to initialize or operate an evolution workspace, choose Hill Climb, A-Evolve, GEPA, AHE, or HyperAgents, let an outer Agent adapt the evolution process, invoke operators directly, improve a candidate through repeated evaluation, recover interrupted evolution, or report an evidence-backed champion."
 ---
 
 # Build an evidence chain
@@ -32,15 +32,15 @@ Detect whether the current directory is an initialized evolution workspace.
 partitions, candidate budget, and execution boundary. In an existing workspace,
 also identify the current champion, next generation, and interrupted state.
 
-## 2. Choose one method
+## 2. Choose a method and control path
 
-The method is fixed when the workspace is created; inside an existing
-workspace, follow the configured operators instead of re-choosing. For a new
-experiment, GEPA is the default; choose Hill Climb when the experiment needs
-the simplest attributable control. Match the method to the available evidence
-and allowed mutable surface. Read only the selected method card; it maps the
-method to shipped operator capabilities as well as explaining its scientific
-boundary.
+The initialized operators define the starting method. The control path may be
+driver-led, where `evolve run` fixes the lifecycle, or agent-led, where the
+outer Agent chooses which direct capabilities to invoke and may change the
+active process when the surface permits it. For a new experiment, GEPA is the
+default; choose Hill Climb when the experiment needs the simplest attributable
+control. Match the method and control path to the research question, available
+evidence, and mutable surface. Read only the relevant method card.
 
 | Observable condition | Method | Read |
 | --- | --- | --- |
@@ -50,12 +50,17 @@ boundary.
 | Failures are execution-shaped and justify harness changes | AHE | [ahe.md](references/ahe.md) |
 | The evolution process itself may also change | HyperAgents | [hyperagents.md](references/hyperagents.md) |
 
+When the outer Agent, rather than a configured mutate stage, should decide the
+sequence of investigation, operator calls, edits, retries, and stopping, read
+[agent-driven control](references/agent-driven.md). This is an experimental
+control path over existing workspace capabilities, not a new operator method.
+
 Read [scientific foundations](references/scientific-foundations.md) only when
 defining or changing evaluator semantics, partitions, acceptance rules, or
 research claims.
 
-**Completion check:** State why the method matches both the evidence and the
-declared mutable surface. If it does not, choose again before running anything.
+**Completion check:** State why the method and control path match the evidence
+and declared mutable surface. If they do not, choose again before running.
 
 For artifact-producing Skills, prefer replaying a selected parent's certified
 artifacts over executing that parent again. Re-execute the parent only when the
@@ -135,11 +140,16 @@ unattended run is desired:
 ```
 
 Driver and agent-led paths share the same evaluation and lineage mechanism. Do
-not run them concurrently or replace an existing driver with a custom loop.
+not run them concurrently. Ordinary agent-led work should close one generation
+through the stable commands below. For an explicitly Agent Driven experiment,
+the outer Agent may adapt its action sequence under the Agent Driven control
+reference; it must still use the mechanism for candidate identity, evaluation,
+and finalization.
 
-**Completion check:** Choose exactly one control path for the next generation.
-For agent-led evolution, name the configured direct operators and the artifacts
-that will justify the edit; source inspection must have a concrete reason.
+**Completion check:** Choose exactly one control path for the active work. For
+agent-led evolution, name the available direct operators, hard budget, and the
+evidence supporting the next action; source inspection must have a concrete
+reason.
 
 ## 5. Close the loop
 

@@ -130,6 +130,14 @@ Evaluation is never a selectable operator — it stays framework-owned. See
 [the operator guide](docs/reference/operators.md) for authoring, validating, and
 composing operators from the CLI.
 
+An outer agent can choose the research action sequence through `evolve agent`.
+Continuous sessions retain research notes, version the active method, publish
+candidates without ending the session, and resume from recorded actions and
+usage. An opt-in Docker boundary isolates the controller and operators;
+independent target packages can run through an isolated Harbor adapter.
+See [Agent Driven control](docs/reference/operators.md#agent-driven-control)
+for setup, budget accounting, recovery, and isolation limits.
+
 ## What Can Evolve
 
 | Surface | Examples | Best fit |
