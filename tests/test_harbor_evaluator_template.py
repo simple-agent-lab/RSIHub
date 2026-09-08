@@ -90,6 +90,7 @@ def test_harbor_score_parser_uses_framework_python(tmp_path: Path) -> None:
     _write_executable(
         fake_bin / "harbor",
         "#!/bin/sh\n"
+        'printf "%s\\n" "$@" > "$EVOLVE_RUN_DIR/harbor-args"\n'
         "jobs_dir=\n"
         'while [ "$#" -gt 0 ]; do\n'
         '  if [ "$1" = --jobs-dir ]; then shift; jobs_dir=$1; fi\n'
@@ -99,6 +100,8 @@ def test_harbor_score_parser_uses_framework_python(tmp_path: Path) -> None:
         'printf \'%s\\n\' \'{"task_name":"task-a","trial_name":"trial","verifier_result":{"rewards":{"reward":1}}}\' > "$jobs_dir/trial/result.json"\n',
     )
     run_dir = tmp_path / "run"
+    overlay = tmp_path / "network configuration.yaml"
+    overlay.write_text("networks: {}\n")
     env = {
         **os.environ,
         "HOME": str(tmp_path / "home"),
@@ -108,6 +111,7 @@ def test_harbor_score_parser_uses_framework_python(tmp_path: Path) -> None:
         "EVOLVE_FRAMEWORK_PYTHON": sys.executable,
         "EVOLVE_CANDIDATE_RUNTIME_ENV_JSON": "{}",
         "EVOLVE_CANDIDATE_RUNTIME_MOUNTS_JSON": "[]",
+        "EVOLVE_HARBOR_EXTRA_DOCKER_COMPOSE_JSON": json.dumps([str(overlay)]),
     }
 
     result = subprocess.run(
@@ -118,6 +122,8 @@ def test_harbor_score_parser_uses_framework_python(tmp_path: Path) -> None:
         capture_output=True,
     )
 
+    arguments = (run_dir / "harbor-args").read_text().splitlines()
+    assert arguments[arguments.index("--extra-docker-compose") + 1] == str(overlay)
     assert result.returncode == 0, result.stderr
     assert (run_dir / "status").read_text() == "complete\n"
 
@@ -895,6 +901,10 @@ def test_harbor_smoke_is_install_only_and_exposes_raw_diagnostics(tmp_path: Path
         "UV_OFFLINE": "1",
         "UV_PYTHON_INSTALL_DIR": "/opt/evolve/uv/python",
     }
+    codex_binary = tmp_path / "codex"
+    codex_binary.write_text("codex\n")
+    rg_binary = tmp_path / "rg"
+    rg_binary.write_text("rg\n")
     args_capture = tmp_path / "args"
     env = {
         **os.environ,
@@ -905,6 +915,8 @@ def test_harbor_smoke_is_install_only_and_exposes_raw_diagnostics(tmp_path: Path
         "EVOLVE_CANDIDATE_SMOKE_MODE": "full",
         "EVOLVE_CANDIDATE_RUNTIME_MOUNTS_JSON": json.dumps(runtime_mounts),
         "EVOLVE_CANDIDATE_RUNTIME_ENV_JSON": json.dumps(runtime_env),
+        "EVOLVE_CODEX_BINARY_PATH": str(codex_binary),
+        "EVOLVE_CODEX_RG_PATH": str(rg_binary),
         "EVOLVE_TASK_LIMIT": "8",
         "EVOLVE_ATTEMPT_ID": "smoke-attempt",
         "EVOLVE_FRAMEWORK_PYTHON": sys.executable,
@@ -922,7 +934,21 @@ def test_harbor_smoke_is_install_only_and_exposes_raw_diagnostics(tmp_path: Path
     assert args[args.index("--n-attempts") + 1] == "1"
     assert args[args.index("-n") + 1] == "8"
     mounts = json.loads(args[args.index("--mounts") + 1])
-    assert mounts == runtime_mounts
+    assert mounts == [
+        *runtime_mounts,
+        {
+            "type": "bind",
+            "source": str(codex_binary),
+            "target": "/usr/local/bin/codex",
+            "read_only": True,
+        },
+        {
+            "type": "bind",
+            "source": str(rg_binary),
+            "target": "/usr/local/bin/rg",
+            "read_only": True,
+        },
+    ]
     agent_environment = [args[index + 1] for index, value in enumerate(args) if value == "--ae"]
     verifier_environment = [args[index + 1] for index, value in enumerate(args) if value == "--ve"]
     for key, value in runtime_env.items():
@@ -941,11 +967,10 @@ def test_harbor_single_smoke_forces_one_task_attempt_and_worker() -> None:
     assert 'if [ "${EVOLVE_CANDIDATE_SMOKE_MODE:-}" = "single" ]; then' in text
 
 
-def test_harbor_legacy_cache_mount_matches_adapter_default() -> None:
+def test_harbor_evaluator_uses_shared_mount_resolver() -> None:
     text = _eval_sh("harbor", "fixture")
-
-    assert '"target":"/opt/evolve/uv/cache"' in text
-    assert '"target":"/installed-agent/uv-cache"' not in text
+    assert "from evolve.integrations.harbor._runtime_plan import " in text
+    assert "mounts = resolve_mounts(os.environ, Path(sys.argv[3]))" in text
 
 
 def test_harbor_rejects_malformed_candidate_runtime_before_launch(tmp_path: Path) -> None:

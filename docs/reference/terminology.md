@@ -137,6 +137,14 @@ Who owns producing a generation: driver-led (the configured `mutate`
 stage) or agent-led (the outer agent). Both are the same role — an agent
 mutating the target — which is why exactly one may own a generation.
 
+**Agent Driven session**:
+A bounded agent-led control path in which the outer agent chooses one typed
+action at a time and RSIHub executes and receipts it. The session may alter
+permitted target and process files. Its action API excludes sealed evaluation
+and mechanism-owned scoring and lineage. This is a trusted-controller control
+contract, not an OS security boundary; untrusted controllers require process or
+container isolation.
+
 ## Stages and decisions
 
 **Stage**:

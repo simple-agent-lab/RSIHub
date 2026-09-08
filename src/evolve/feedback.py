@@ -99,6 +99,26 @@ def _copy_trace_evidence(run_dir: Path, destination: Path) -> list[str]:
     return copied
 
 
+def _copy_harbor_state(run_dir: Path, destination: Path) -> str | None:
+    source = run_dir / "rollout" / "harbor-state.json"
+    try:
+        payload = json.loads(source.read_text())
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    provenance = payload.get("source") if isinstance(payload, dict) else None
+    if (
+        not isinstance(payload, dict)
+        or payload.get("schema_version") != 1
+        or not isinstance(provenance, dict)
+        or provenance.get("kind") != "harbor_rollout"
+        or provenance.get("role") != "train"
+    ):
+        return None
+    destination.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source, destination / "harbor-state.json")
+    return "feedback/evidence/harbor-state.json"
+
+
 def _rollout_history(workspace: Path, rows: list[Row], history_k: int) -> list[Row]:
     history: list[Row] = []
     for row in rows[-int(history_k) :]:
@@ -178,6 +198,8 @@ def write_feedback_bundle(*, workspace: Path, run_dir: Path, history_k: int = 8)
     (failures / "README.md").write_text("The feedback bundle writes a minimal failure summary.\n")
     trace_feedback = _copy_trace_feedback(run_dir, failures)
     evidence_files = _copy_trace_evidence(run_dir, feedback / "evidence")
+    if harbor_state := _copy_harbor_state(run_dir, feedback / "evidence"):
+        evidence_files.append(harbor_state)
     _write_json(feedback / "evidence" / "history.json", _rollout_history(workspace, rows, history_k))
     evidence_files.append("feedback/evidence/history.json")
     _write_json(feedback / "evaluation_diagnostics.json", _evaluation_diagnostics(rows, history_k))
@@ -193,6 +215,11 @@ def write_feedback_bundle(*, workspace: Path, run_dir: Path, history_k: int = 8)
         "- [current trace analysis](failures/analyze.md)\n" if trace_feedback and not has_selected_evidence else ""
     )
     evidence_link = "- [selected trace evidence](evidence/selected.md)\n" if has_selected_evidence else ""
+    harbor_state_link = (
+        "- [raw Harbor runtime state](evidence/harbor-state.json)\n"
+        if "feedback/evidence/harbor-state.json" in evidence_files
+        else ""
+    )
     history_link = "- [rollout and edit history](evidence/history.json)\n"
     (feedback / "index.md").write_text(
         "# Feedback Bundle\n\n"
@@ -201,6 +228,7 @@ def write_feedback_bundle(*, workspace: Path, run_dir: Path, history_k: int = 8)
         "- [failures](failures/)\n"
         f"{trace_link}"
         f"{evidence_link}"
+        f"{harbor_state_link}"
         f"{history_link}"
         "- [evaluation diagnostics](evaluation_diagnostics.json)\n"
         "- [last accepted diff](last_accepted.diff)\n"

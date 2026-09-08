@@ -21,12 +21,24 @@ decision (and usually a demolition pass) instead of silent sprawl.
 | `__init__.py` | 10 | package marker, version |
 | `__main__.py` | 10 | `python -m evolve` entry |
 | `agent.py` | 200 | agent command execution and error/result types |
+| `agent_cli.py` | 275 | CLI surface for durable outer-agent sessions, deferred handoffs, progression, and recovery |
+| `agent_evidence.py` | 100 | verify structured observation claims against content-addressed workspace evidence |
+| `agent_driver.py` | 975 | typed Agent Driven actions, resource budgets, integrity checks, durable receipts, recovery, and safe orchestration dispatch |
+| `agent_observability.py` | 175 | project durable action, controller, and handoff incidents into session health without guessing root causes |
+| `integrations/harbor/_time_budget.py` | 125 | resolve declared Harbor agent limits and publish elapsed-time evidence without changing enforcement |
+| `agent_optimizer.py` | 175 | immutable research-method bundles and exact per-attempt loading inputs |
+| `agent_research.py` | 200 | continuous research lifecycle, adoption, and no-effect rejection feedback |
+| `agent_queue.py` | 275 | durable deferred handoff, model-free progression, and certified-best budget closure |
+| `agent_isolation.py` | 300 | public controller views, untrusted file handoffs and typed host requests for isolated continuous sessions |
+| `agent_launcher.py` | 475 | resumable outer-controller process ownership, usage metering, global budget status, and retained logs |
 | `archive.py` | 475 | append-only event store: merge semantics, stamped-field protection, mirroring, integrity fsck |
 | `candidate/__init__.py` | 10 | candidate-boundary package marker |
 | `candidate/harbor_smoke.py` | 125 | audit Harbor job/task artifacts so process-level success cannot hide trial failures |
 | `candidate/smoke.py` | 225 | run install or one-request model smoke against an exact candidate snapshot and persist redacted evidence |
+| `candidate/execution.py` | 125 | execute verified independent packages through the isolated runtime and retain host-owned execution receipts |
+| `candidate/package.py` | 225 | export exact target-only Git snapshots and materialize digest-pinned candidate packages without research or evaluator files |
 | `candidate/snapshot.py` | 100 | exact candidate Git tree construction, temporary materialization, and reviewed-tree commit verification |
-| `cli.py` | 475 | argument parsing and verb dispatch only — no logic |
+| `cli.py` | 550 | argument parsing and verb dispatch only — no logic |
 | `composition/__init__.py` | 25 | stable recipe-resolution facade without CLI dependencies |
 | `composition/catalog.py` | 250 | filesystem-only operator library discovery and subprocess inspection protocol |
 | `composition/cli.py` | 100 | recipe check command rendering human and machine-readable resolved bindings |
@@ -53,9 +65,11 @@ decision (and usually a demolition pass) instead of silent sprawl.
 | `execution_runtime/resolve.py` | 175 | explicit/env/Linux/macOS Docker endpoint resolution |
 | `experiment_smoke.py` | 210 | isolated one-task gen0-to-gen1 full-loop canary |
 | `feedback.py` | 250 | assemble current and historical rollout evidence plus ledger-derived feedback for mutation |
+| `public_feedback.py` | 125 | explicit aggregate development feedback without private verifier logs or free-text diagnostics |
+| `operator_isolation.py` | 225 | public operator data views and validated candidate/result handoffs for isolated sessions |
 | `operators.py` | 200 | subprocess runner for workspace operator scripts (contract: env vars, --config, timeout) |
 | `operator_cli.py` | 325 | agent-facing library authoring/discovery, active inspection, and one-stage invocation commands |
-| `orchestration.py` | 400 | safe outer-agent composition of driver verbs, stage handoffs, retries, and admission receipts |
+| `orchestration.py` | 450 | safe outer-agent composition of driver verbs, Agent-session route exclusion, stage handoffs, retries, and admission receipts |
 | `patching.py` | 150 | mutable-surface patch creation and parent-reference selection |
 | `population.py` | 100 | genid/lineage bookkeeping for fan-out generations |
 | `preflight/__init__.py` | 50 | stable public preflight facade and prospective-check exports |
@@ -67,6 +81,10 @@ decision (and usually a demolition pass) instead of silent sprawl.
 | `run_summary.py` | 200 | recipe-aware terminal-state assessment and machine-readable run assertion receipts |
 | `runtime/__init__.py` | 25 | stable process and evaluation-attempt runtime facade |
 | `runtime/process.py` | 250 | generated-workspace owned-process and evaluation-attempt helpers |
+| `runtime/model_bridge.py` | 175 | container-local HTTP client bridge to the metered file transport without provider credentials |
+| `runtime/model_broker.py` | 300 | host-owned metered model requests over an untrusted file transport with duplicate and unknown-cost protection |
+| `runtime/files.py` | 175 | read regular files and explicit trees without following untrusted links |
+| `runtime/sandbox.py` | 200 | run offline untrusted code in a pinned Docker image with only explicit input and output mounts |
 | `runtime/auth.py` | 100 | explicit API-key or Codex auth-file selection without home-directory discovery |
 | `runtime/config.py` | 300 | inline runtime validation, endpoint identity, canonical resolution, and trusted loading |
 | `runtime/environment.py` | 450 | strict and legacy role-specific credential, endpoint, proxy, template, and redacted Harbor environment planning |
@@ -79,10 +97,15 @@ decision (and usually a demolition pass) instead of silent sprawl.
 | `harbor_local.py` | 250 | minimal in-place Harbor environment for fast trials against a pre-configured local agent runtime |
 | `host_runtime.py` | 100 | host-side locked runtime process helpers |
 | `integrations/__init__.py` | 10 | external runtime integration package boundary |
+| `integrations/harbor/_recovery.py` | 200 | explicit same-config Harbor recovery with evidence backup and durable attempt receipts |
+| `integrations/harbor/_runtime_plan.py` | 200 | shared Harbor mount/Compose input resolution and versioned plan receipts for training and evaluation |
 | `integrations/harbor/__init__.py` | 10 | Harbor integration package boundary |
 | `integrations/harbor/local_auto_agent.py` | 275 | local CLI discovery and delegation to Harbor installed-agent adapters with required ATIF output |
 | `integrations/harbor/_agent_roles.py` | 50 | canonical MiniSWE role names and narrow compatibility aliases |
 | `integrations/harbor/_candidate_source.py` | 75 | exact candidate-source validation and archive-copy boundary |
+| `integrations/harbor/_worker_environment.py` | 250 | typed task-environment file RPC with byte-only transfers and no candidate-selected host paths |
+| `integrations/harbor/isolated_candidate.py` | 325 | Harbor adapter proxy retaining candidate state in a private-file-isolated worker and scoping environment RPC to agent phases |
+| `integrations/harbor/_candidate_worker.py` | 175 | isolated candidate instance lifecycle and environment RPC client entrypoint |
 | `integrations/harbor/codex_candidate.py` | 75 | Codex adapter for OpenAI-compatible Responses endpoints |
 | `integrations/harbor/miniswe_candidate.py` | 550 | exact-candidate MiniSWE Harbor evaluator agent |
 | `integrations/harbor/miniswe_task_file.py` | 130 | large-task MiniSWE mutate-runner transport |
@@ -106,10 +129,10 @@ each workspace, immutable there because it sits outside the mutable surface
 | --- | --- | --- |
 | `frozen/__init__.py` | 50 | the frozen-ring definition (litmus + two homes: contract/gate vs the evaluator) — the canonical anchor a contributor reads |
 | `frozen/config.py` | 400 | dependency-free declarative operator config schemas, normalization, inspection descriptions, and path-aware errors |
-| `frozen/interfaces.py` | 350 | operator ABCs, registry, result schemas, and strict operator payload validation |
+| `frozen/interfaces.py` | 375 | operator ABCs, registry, result schemas, and strict operator payload validation |
 | `frozen/sdk.py` | 350 | Python operator entrypoint and file-contract IO; no library algorithm policy |
 
-Total `src/evolve/` budget: **20815 lines**. The budget admits the read-only experiment viewer,
+Total `src/evolve/` budget: **26740 lines**. The budget admits the read-only experiment viewer,
 the explicit content-backed
 evaluation-contract boundaries, the opt-in in-place Harbor runtime, and the redacted trace-analysis
 boundary between rollout and feedback assembly; if the mechanism wants to

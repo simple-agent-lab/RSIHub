@@ -8,6 +8,8 @@ from pathlib import Path
 
 from evolve.frozen.interfaces import OperatorContext, RolloutOperator, RolloutResult
 from evolve.host_runtime import uv_run
+from evolve.integrations.harbor._runtime_plan import resolve_mounts, write_compose_plan, write_mount_plan
+from evolve.integrations.harbor._time_budget import summarize_time_budgets
 from evolve.splits import load_manifest
 
 from .evidence import (
@@ -17,6 +19,7 @@ from .evidence import (
     _with_missing_result_placeholders,
     _write_json,
     collect_cases,
+    execution_error_summary,
     require_rollout_cases,
 )
 from .execution import (
@@ -31,6 +34,7 @@ from .execution import (
     _run_harbor,
     _select_train_tasks,
 )
+from .state import build_harbor_state
 
 
 class HarborRollout(RolloutOperator):
@@ -133,25 +137,11 @@ class HarborRollout(RolloutOperator):
         uv_cache = (
             Path(configured_cache).expanduser() if configured_cache else ctx.workspace / "runs" / "runtime" / "uv-cache"
         )
-        uv_cache.mkdir(parents=True, exist_ok=True)
-        mounts = [
-            {
-                "type": "bind",
-                "source": str(uv_cache.resolve()),
-                "target": "/opt/evolve/uv/cache",
-            }
-        ]
+        mounts = resolve_mounts(os.environ, uv_cache)
+        write_mount_plan(ctx.run_dir, mounts)
+        for overlay in write_compose_plan(ctx.run_dir, os.environ):
+            base_command.extend(["--extra-docker-compose", overlay])
         uv_python = os.environ.get("EVOLVE_UV_PYTHON_INSTALL_DIR")
-        if uv_python:
-            uv_python_dir = Path(uv_python).expanduser().resolve()
-            uv_python_dir.mkdir(parents=True, exist_ok=True)
-            mounts.append(
-                {
-                    "type": "bind",
-                    "source": str(uv_python_dir),
-                    "target": "/installed-agent/uv-python",
-                }
-            )
         base_command.extend(
             [
                 "--mounts",
@@ -178,13 +168,20 @@ class HarborRollout(RolloutOperator):
             task_selectors=split_task_names,
             include_task=include_task,
         )
-        returncode = _run_harbor(initial_command, checkout, rollout_dir / "harbor.log", harbor_env)
+        stop_limits = {
+            name: ctx.config[key]
+            for name, key in (("errors", "stop_after_errors"), ("failures", "stop_after_failures"))
+            if key in ctx.config
+        }
+        run_options = {"jobs_dir": jobs_dir, "stop_limits": stop_limits} if stop_limits else {}
+        returncode = _run_harbor(initial_command, checkout, rollout_dir / "harbor.log", harbor_env, **run_options)
+        tasks_dir = Path(tasks) if Path(tasks).is_dir() else None
         cases = _with_missing_result_placeholders(
             collect_cases(
                 jobs_dir,
                 field_limit=field_limit,
                 pass_threshold=pass_threshold,
-                tasks_dir=Path(tasks) if Path(tasks).is_dir() else None,
+                tasks_dir=tasks_dir,
                 workspace=ctx.workspace,
                 trajectory_archive_dir=rollout_dir / "trajectories",
             ),
@@ -194,15 +191,22 @@ class HarborRollout(RolloutOperator):
             cases = [_batch_failure_case(rollout_dir / "harbor.log", returncode, field_limit)]
 
         _write_json(rollout_dir / "cases.json", cases)
+        _write_json(
+            rollout_dir / "harbor-state.json",
+            build_harbor_state(
+                cases,
+                jobs_dir=jobs_dir,
+                tasks_dir=tasks_dir,
+                workspace=ctx.workspace,
+                generation=str(ctx.genid),
+                role="dedicated" if dedicated_tasks else "train",
+                harbor_returncode=returncode,
+            ),
+        )
         require_rollout_cases(cases, returncode=returncode, harbor_log=rollout_dir / "harbor.log")
 
         rewards = [case["reward"] for case in cases if isinstance(case.get("reward"), (int, float))]
         counts = {name: sum(case["outcome"] == name for case in cases) for name in _OUTCOME_ORDER}
-        infra_tasks = [
-            str(case.get("task_name") or case.get("trial_name") or "unknown")
-            for case in cases
-            if case.get("outcome") in {"infra_error", "incomplete"}
-        ]
         summary = {
             "variant": "harbor",
             "split": "dedicated" if dedicated_tasks else "train",
@@ -211,9 +215,8 @@ class HarborRollout(RolloutOperator):
             "tasks_observed": len(cases),
             "passed": counts["passed"],
             "failed": counts["failed"],
-            "agent_errors": counts["agent_error"],
-            "infra_errors": counts["infra_error"] + counts["incomplete"],
-            "infra_tasks": infra_tasks,
+            **execution_error_summary(cases),
+            **summarize_time_budgets(cases),
             "mean_observed_reward": round(sum(rewards) / len(rewards), 6) if rewards else None,
             "jobs_dir": str(jobs_dir),
         }
@@ -222,6 +225,7 @@ class HarborRollout(RolloutOperator):
             artifacts=[
                 "rollout/harbor.log",
                 "rollout/cases.json",
+                "rollout/harbor-state.json",
                 f"harbor-jobs:{jobs_dir}",
             ],
         )

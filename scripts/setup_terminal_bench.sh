@@ -8,6 +8,8 @@ ASSET_ROOT=${EVOLVE_ASSET_DIR:-$ROOT/.evolve-assets/terminal-bench-2.0}
 [[ $ASSET_ROOT == /* ]] || ASSET_ROOT=$CALLER/$ASSET_ROOT
 RAW_DATASET=$ASSET_ROOT/raw
 DATASET=$ASSET_ROOT/terminal-bench-2-30-v1
+READY_DATASET=$DATASET
+[[ $RECIPE == *_tbench_full ]] && READY_DATASET=$RAW_DATASET/terminal-bench
 RAW_PENDING=$ASSET_ROOT/.raw.pending
 OWNS_PENDING=0
 
@@ -19,15 +21,23 @@ cleanup() {
 trap cleanup EXIT
 
 case "$RECIPE" in
-  aevolve|ahe|ahe_codex|gepa|hill_climb|hill_climb_codex|hyperagents|hyperagents_codex)
-    IMAGE=evolve-mutate-codex:20260818-codex0146
+  hyperagents_tbench_full)
+    IMAGE=evolve-mutate-app:20260724-tools-mswe245
+    IMAGE_CONTEXT=$ROOT/containers/mutate
+    IMAGE_LABEL=io.evolve.miniswe.version
+    IMAGE_VERSION=2.4.5
+    BUILD_ARGS=(--build-arg MINISWE_VERSION=2.4.5)
+    ;;
+  aevolve|ahe|hyperagents|ahe_codex|gepa|hill_climb|hill_climb_codex|hyperagents_codex|hyperagents_codex_tbench_full)
+    IMAGE=evolve-mutate-codex:20260904-codex0149
     IMAGE_CONTEXT=$ROOT/containers/mutate-codex
     IMAGE_LABEL=io.evolve.codex.version
-    IMAGE_VERSION=0.146.0
-    BUILD_ARGS=(--build-arg CODEX_VERSION=0.146.0)
+    IMAGE_VERSION=0.149.0
+    BUILD_ARGS=(--build-arg CODEX_VERSION=0.149.0)
+    REUSABLE_CODEX_BASE=evolve-mutate-codex:20260818-codex0146
     ;;
   *)
-    echo "unsupported recipe '$RECIPE'; supported recipes: aevolve, ahe, ahe_codex, gepa, hill_climb, hill_climb_codex, hyperagents, hyperagents_codex" >&2
+    echo "unsupported recipe '$RECIPE'; supported recipes: aevolve, ahe, ahe_codex, gepa, hill_climb, hill_climb_codex, hyperagents, hyperagents_codex, hyperagents_tbench_full, hyperagents_codex_tbench_full" >&2
     exit 2
     ;;
 esac
@@ -45,6 +55,15 @@ if [[ ! $GIT_MAJOR =~ ^[0-9]+$ || ! $GIT_MINOR =~ ^[0-9]+$ ]] ||
   exit 2
 fi
 docker info >/dev/null 2>&1 || { echo "Docker daemon is unavailable" >&2; exit 2; }
+
+if [[ ${REUSABLE_CODEX_BASE:-} ]]; then
+  REUSABLE_CODEX_VERSION=$(
+    docker image inspect --format "{{ index .Config.Labels \"$IMAGE_LABEL\" }}" "$REUSABLE_CODEX_BASE" 2>/dev/null || true
+  )
+  if [[ $REUSABLE_CODEX_VERSION == 0.146.0 ]]; then
+    BUILD_ARGS+=(--build-arg "RUNTIME_BASE=$REUSABLE_CODEX_BASE" --build-arg INSTALL_TOOLS=0)
+  fi
+fi
 
 cd "$ROOT"
 uv sync --frozen
@@ -64,5 +83,5 @@ if [[ $INSTALLED_VERSION != "$IMAGE_VERSION" ]]; then
   docker build "${BUILD_ARGS[@]}" -t "$IMAGE" "$IMAGE_CONTEXT"
 fi
 
-echo "Terminal-Bench 2.0 setup is ready at $DATASET"
+echo "Terminal-Bench 2.0 setup is ready at $READY_DATASET"
 echo "EVOLVE_ASSET_DIR=\"$ASSET_ROOT\" ./scripts/run_recipe_demo.sh $RECIPE"

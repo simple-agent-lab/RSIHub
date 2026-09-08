@@ -35,7 +35,7 @@ contracts; do not keep stale tests green with compatibility shims.
 
 Keep these categories separate:
 
-- **Recipes** (`recipes/`) are the five supported, user-facing configurations.
+- **Recipes** (`recipes/`) are the supported, user-facing configurations.
   Recipe YAML selects the target, evaluator, and operator behavior.
 - **Scaffolds** (`scaffolds/`) are generated workspace structure. Common files
   live under `scaffolds/workspace/`; evaluator-specific files live under their

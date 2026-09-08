@@ -14,14 +14,21 @@ represents.
 - [Hill Climb for Codex](hill_climb_codex/README.md)
 - [HyperAgents](hyperagents/README.md)
 - [HyperAgents for Codex](hyperagents_codex/README.md)
+- [HyperAgents on full Terminal-Bench 2.0](hyperagents_tbench_full/README.md)
+- [HyperAgents for Codex on full Terminal-Bench 2.0](hyperagents_codex_tbench_full/README.md)
 
-All main recipes use the shared, content-pinned Terminal-Bench 2.0 subset. The
-setup script downloads and verifies it and builds the pinned Codex 0.146.0
-mutation-agent image used by the benchmark recipes:
+Main recipes use the shared, content-pinned Terminal-Bench 2.0 subset, except
+the two `*_tbench_full` profiles, which freeze all 89 official tasks. The setup
+script downloads and verifies the source dataset and builds only the selected
+recipe's pinned MiniSWE or Codex mutation-agent image:
 
 ```bash
 ./scripts/setup_terminal_bench.sh gepa
 ./scripts/run_recipe_demo.sh gepa
+./scripts/setup_terminal_bench.sh hyperagents_tbench_full
+./scripts/run_recipe_demo.sh hyperagents_tbench_full
+./scripts/setup_terminal_bench.sh hyperagents_codex_tbench_full
+./scripts/run_recipe_demo.sh hyperagents_codex_tbench_full
 ```
 
 Set `EVOLVE_ASSET_DIR` to place the reusable dataset outside the default

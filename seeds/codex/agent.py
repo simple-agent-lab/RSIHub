@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 import shlex
+import time
 import tomllib
 import uuid
 from collections.abc import Mapping
@@ -14,6 +15,8 @@ from typing import Any
 from harbor.agents.installed.base import CliFlag
 from harbor.agents.installed.codex import Codex
 from harbor.environments.base import BaseEnvironment
+
+from evolve.integrations.harbor._time_budget import read_agent_time_budget
 
 MODULE_ROOT = Path(__file__).resolve().parent
 REMOTE_SKILLS_DIR = "/tmp/evolve-target-skills"
@@ -73,6 +76,8 @@ class HarborAgent(Codex):
     ]
 
     def __init__(self, logs_dir: Path, model_name: str | None = None, **kwargs: Any) -> None:
+        self._budget_logs_dir = logs_dir
+        self._deadline_unix: float | None = None
         self._target_root = _target_root(kwargs.get("extra_env"))
         settings = _settings(self._target_root)
         codex = _table(settings, "codex")
@@ -101,6 +106,23 @@ class HarborAgent(Codex):
             kwargs.setdefault("tool_output_token_limit", compaction.get("tool_output_token_limit"))
 
         super().__init__(logs_dir=logs_dir, model_name=resolved_model, **kwargs)
+
+    def render_instruction(self, instruction: str) -> str:
+        self._deadline_unix = None
+        rendered = super().render_instruction(instruction)
+        budget = read_agent_time_budget(self._budget_logs_dir)
+        if budget["status"] != "available":
+            return rendered + "\n\nAgent execution time limit: unavailable; do not assume an unlimited budget."
+        self._deadline_unix = time.time() + budget["limit_s"]
+        return rendered + (
+            f"\n\nAgent execution budget: {budget['limit_s']:g} seconds, including setup inside this run, "
+            "reasoning, tools, and final checks. Harbor enforces the cutoff externally. "
+            "EVOLVE_AGENT_DEADLINE_UNIX is an approximate Unix deadline measured at agent entry; "
+            "setup before the first model call consumes this same budget. "
+            "Read remaining seconds with: python3 -c 'import os,time; "
+            'print(max(0, float(os.environ["EVOLVE_AGENT_DEADLINE_UNIX"])-time.time()))\'. '
+            "This reports time, does not extend it, and is not proof the task is complete."
+        )
 
     def _auth_mode(self) -> str:
         configured = (self._get_env(AUTH_MODE_ENV) or "auto").strip().lower()
@@ -189,6 +211,10 @@ class HarborAgent(Codex):
             )
 
         run_id = uuid.uuid4().hex
+        if self._deadline_unix is not None:
+            command = f"export EVOLVE_AGENT_DEADLINE_UNIX={self._deadline_unix:.6f}; {command}"
+        else:
+            command = f"unset EVOLVE_AGENT_DEADLINE_UNIX; {command}"
         command = f"export {AGENT_RUN_ENV}={run_id}; {command}"
         try:
             return await super().exec_as_agent(

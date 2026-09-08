@@ -266,6 +266,8 @@ def _load_task_trials(jobs_dir: Path) -> list[dict[str, Any]]:
             verifier_timeout_is_final_zero=verifier_timeout_is_final_zero,
             verifier_dependency_error=verifier_dependency_error,
         )
+        if status == "timeout" and owner == "benchmark_agent" and _network_only_timeout(trial_dir):
+            status, reward, owner = "infrastructure_failed", None, "agent_runtime"
         exception_info = result.get("exception_info")
         exception_type = None
         exception_message = None
@@ -339,6 +341,36 @@ def _scoring_rewards(trials: list[dict[str, Any]]) -> list[float]:
 def _reward(result: dict[str, Any]) -> float | None:
     reward = ((result.get("verifier_result") or {}).get("rewards") or {}).get("reward")
     return float(reward) if isinstance(reward, (int, float)) and not isinstance(reward, bool) else None
+
+
+def _network_only_timeout(trial_dir: Path) -> bool:
+    """Require retained input-only trajectory plus repeated transport errors."""
+    try:
+        trajectory = json.loads((trial_dir / "agent/trajectory.json").read_text())
+        steps = trajectory.get("steps")
+        if not isinstance(steps, list) or not steps:
+            return False
+        if any(not isinstance(step, dict) or step.get("source") not in {"system", "user"} for step in steps):
+            return False
+        with (trial_dir / "agent/codex.txt").open("rb") as stream:
+            stream.seek(0, 2)
+            stream.seek(max(0, stream.tell() - 262144))
+            lines = stream.read().decode("utf-8", errors="replace").splitlines()
+    except (OSError, ValueError, AttributeError):
+        return False
+    errors = 0
+    for line in lines:
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if (
+            isinstance(event, dict)
+            and event.get("type") == "error"
+            and str(event.get("message", "")).startswith("Reconnecting... waiting for network (Connection failed:")
+        ):
+            errors += 1
+    return errors >= 2
 
 
 def _verifier_timeout_is_final_zero(jobs_dir: Path) -> bool:

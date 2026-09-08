@@ -23,8 +23,10 @@ from evolve.workspace import InitOptions, _write_target, init_workspace
 CANDIDATE = "evolve.integrations.harbor.miniswe_candidate:CandidateMiniSweAgent"
 OPTIONAL_INTEGRATIONS = {
     "evolve.integrations.harbor.codex_candidate",
+    "evolve.integrations.harbor.isolated_candidate",
     "evolve.integrations.harbor.miniswe_task_file",
 }
+FILE_TASK = "evolve.integrations.harbor.miniswe_task_file:InstalledMiniSweAgent"
 ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 CASES = {
     "hill_climb": ("external", CANDIDATE, "codex"),
@@ -33,8 +35,10 @@ CASES = {
     "ahe_codex": ("codex", "target.agent:HarborAgent", "codex"),
     "gepa": ("codex", "target.agent:HarborAgent", "codex"),
     "hyperagents": ("external", CANDIDATE, "codex"),
+    "hyperagents_tbench_full": ("external", CANDIDATE, FILE_TASK),
     "hill_climb_codex": ("codex", "target.agent:HarborAgent", "codex"),
     "hyperagents_codex": ("codex", "target.agent:HarborAgent", "codex"),
+    "hyperagents_codex_tbench_full": ("codex", "target.agent:HarborAgent", "codex"),
 }
 MINISWE_REVISION = "388da74aad620a384ab47669b17c52133e30e7c3"
 

@@ -296,14 +296,36 @@ def test_legacy_local_manifest_is_readable_but_cannot_run_new_canonical_evaluati
         select_dataset_tasks(manifest, dataset.as_posix(), "train")
 
 
-def test_harbor_rollout_uses_only_frozen_train_task_names(tmp_path: Path, monkeypatch) -> None:
+@pytest.mark.parametrize("extra_mounts", [False, True])
+def test_harbor_rollout_uses_only_frozen_train_task_names(tmp_path: Path, monkeypatch, extra_mounts: bool) -> None:
     from test_m7_harbor_rollout import _harbor_rollout_module
 
     module = _harbor_rollout_module()
+    overlay = tmp_path / "network configuration.yaml"
+    overlay.write_text("networks: {}\n")
+    monkeypatch.setenv("EVOLVE_HARBOR_EXTRA_DOCKER_COMPOSE_JSON", json.dumps([str(overlay)]))
     monkeypatch.delenv("EVOLVE_HARBOR_MODEL", raising=False)
     monkeypatch.setenv("OPENAI_MODEL", "test-model")
     python_dir = tmp_path / "uv-python"
     monkeypatch.setenv("EVOLVE_UV_PYTHON_INSTALL_DIR", str(python_dir))
+    codex_binary = tmp_path / "codex"
+    codex_binary.write_text("codex\n")
+    monkeypatch.setenv("EVOLVE_CODEX_BINARY_PATH", str(codex_binary))
+    rg_binary = tmp_path / "rg"
+    rg_binary.write_text("rg\n")
+    monkeypatch.setenv("EVOLVE_CODEX_RG_PATH", str(rg_binary))
+    monkeypatch.delenv("EVOLVE_CANDIDATE_RUNTIME_MOUNTS_JSON", raising=False)
+    configured_mounts = [
+        {"type": "bind", "source": str(tmp_path / "shared-cache"), "target": "/opt/evolve/uv/cache"},
+        {
+            "type": "bind",
+            "source": str(tmp_path / "ca-certificates.crt"),
+            "target": "/etc/ssl/certs/ca-certificates.crt",
+            "read_only": True,
+        },
+    ]
+    if extra_mounts:
+        monkeypatch.setenv("EVOLVE_CANDIDATE_RUNTIME_MOUNTS_JSON", json.dumps(configured_mounts))
     checkout = tmp_path / "checkout"
     evaluator = checkout / "evaluator"
     evaluator.mkdir(parents=True)
@@ -361,21 +383,34 @@ def test_harbor_rollout_uses_only_frozen_train_task_names(tmp_path: Path, monkey
     )
 
     result = module.HarborRollout().rollout(checkout, context)
+    assert captured[captured.index("--extra-docker-compose") + 1] == str(overlay)
 
     included = [captured[index + 1] for index, value in enumerate(captured) if value == "--include-task-name"]
     assert included == manifest["tasks"]["train"][:3]
     assert f"EVOLVE_CANDIDATE_SOURCE={checkout / 'target'}" in captured
     mounts = json.loads(captured[captured.index("--mounts") + 1])
-    assert mounts == [
-        {
-            "type": "bind",
-            "source": str(tmp_path / "uv-cache"),
-            "target": "/opt/evolve/uv/cache",
-        },
+    expected_base = (
+        configured_mounts
+        if extra_mounts
+        else [{"type": "bind", "source": str(tmp_path / "uv-cache"), "target": "/opt/evolve/uv/cache"}]
+    )
+    assert mounts == expected_base + [
         {
             "type": "bind",
             "source": str(python_dir),
             "target": "/installed-agent/uv-python",
+        },
+        {
+            "type": "bind",
+            "source": str(codex_binary),
+            "target": "/usr/local/bin/codex",
+            "read_only": True,
+        },
+        {
+            "type": "bind",
+            "source": str(rg_binary),
+            "target": "/usr/local/bin/rg",
+            "read_only": True,
         },
     ]
     assert captured.count("--mounts") == 1
@@ -390,12 +425,24 @@ def test_harbor_rollout_uses_only_frozen_train_task_names(tmp_path: Path, monkey
     assert captured[captured.index("--environment-kwarg") + 1] == 'workdir="/workspace"'
     assert captured[captured.index("--verifier-timeout-multiplier") + 1] == "2.0"
     assert result.summary["split"] == "train"
+    assert "rollout/harbor-state.json" in result.artifacts
+    state = json.loads((context.run_dir / "rollout" / "harbor-state.json").read_text())
+    assert state["source"]["role"] == "train"
+    assert [task["task_name"] for task in state["tasks"]] == manifest["tasks"]["train"][:3]
 
 
-def test_harbor_rollout_keeps_infra_tasks_without_outer_repair(tmp_path: Path, monkeypatch) -> None:
+@pytest.mark.parametrize("reward", [None, 0.0, 1.0])
+@pytest.mark.parametrize("exception_type", ["VerifierTimeoutError", "AgentTimeoutError", "NonZeroAgentExitCodeError"])
+def test_harbor_rollout_keeps_infra_tasks_without_outer_repair(
+    tmp_path: Path, monkeypatch, reward, exception_type
+) -> None:
     from test_m7_harbor_rollout import _harbor_rollout_module
 
     module = _harbor_rollout_module()
+    infrastructure = exception_type == "VerifierTimeoutError"
+    outcome = (
+        ("infra_error" if infrastructure else "agent_error") if reward is None else ("passed" if reward else "failed")
+    )
     checkout = tmp_path / "checkout"
     evaluator = checkout / "evaluator"
     evaluator.mkdir(parents=True)
@@ -430,10 +477,10 @@ def test_harbor_rollout_keeps_infra_tasks_without_outer_repair(tmp_path: Path, m
             },
             {
                 "task_name": f"terminal-bench/{selected[1]}",
-                "reward": None,
-                "outcome": "infra_error",
+                "reward": reward,
+                "outcome": outcome,
                 "exception": {
-                    "type": "VerifierTimeoutError",
+                    "type": exception_type,
                     "message": "verifier timed out",
                 },
                 "result_path": str(jobs_dir / selected[1] / "result.json"),
@@ -470,14 +517,18 @@ def test_harbor_rollout_keeps_infra_tasks_without_outer_repair(tmp_path: Path, m
     cases = json.loads((context.run_dir / "rollout/cases.json").read_text())
     by_task = {case["task_name"]: case for case in cases}
     assert by_task[selected[0]]["outcome"] == "passed"
-    assert by_task[selected[0]]["observed_task_name"] == f"terminal-bench/{selected[0]}"
     infra = by_task[selected[1]]
-    assert infra["outcome"] == "infra_error"
-    assert infra["observed_task_name"] == f"terminal-bench/{selected[1]}"
-    assert infra["exception"]["type"] == "VerifierTimeoutError"
+    assert infra["outcome"] == outcome
+    assert infra["reward"] == reward
+    assert infra["exception"]["type"] == exception_type
     assert not (context.run_dir / "rollout/repair").exists()
-    assert result.summary["infra_errors"] == 1
-    assert result.summary["infra_tasks"] == [selected[1]]
+    assert result.summary["infra_errors"] == int(infrastructure)
+    assert result.summary["agent_errors"] == int(not infrastructure)
+    assert result.summary["exception_counts"] == {exception_type: 1}
+    assert result.summary["passed"] == 1 + int(reward == 1.0)
+    assert result.summary["failed"] == int(reward == 0.0)
+    assert result.summary["infra_tasks"] == ([selected[1]] if infrastructure else [])
+    assert infra["observed_task_name"] == f"terminal-bench/{selected[1]}"
     assert result.summary["tasks_observed"] == 2
 
 

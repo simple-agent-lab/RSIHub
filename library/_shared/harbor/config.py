@@ -39,6 +39,8 @@ CONFIG = Config(
         "agent_timeout_multiplier": number(),
         "verifier_timeout_multiplier": number(),
         "max_retries": integer(minimum=0),
+        "stop_after_errors": integer(minimum=1),
+        "stop_after_failures": integer(minimum=1),
         "field_limit": integer(default=2000, minimum=1),
         "pass_threshold": number(default=1.0),
         "environment": string(),

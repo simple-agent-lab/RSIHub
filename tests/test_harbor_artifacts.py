@@ -164,6 +164,33 @@ def test_collect_harbor_artifacts_scores_agent_timeouts_as_zero(tmp_path: Path) 
     assert scoring_rewards == [0.0]
 
 
+def test_network_only_timeout_is_not_a_benchmark_zero(tmp_path: Path) -> None:
+    jobs = tmp_path / "jobs"
+    directory = jobs / "case-a__one"
+    write_trial(directory, task="case-a", trial="one", reward=0.0, exception_type="AgentTimeoutError")
+    agent = directory / "agent"
+    agent.mkdir()
+    trajectory = agent / "trajectory.json"
+    trajectory.write_text(json.dumps({"steps": [{"source": "user", "message": "task"}]}))
+    error = {
+        "type": "error",
+        "message": "Reconnecting... waiting for network (Connection failed: error sending request)",
+    }
+    (agent / "codex.txt").write_text((json.dumps(error) + "\n") * 3)
+    vector, _, rewards = collect_harbor_artifacts(jobs)
+    trial = vector["tasks"]["case-a"]["trials"][0]
+    assert trial["status"] == "infrastructure_failed"
+    assert trial["owner"] == "agent_runtime"
+    assert trial["exception_type"] == "AgentTimeoutError"
+    assert rewards == []
+
+    # A recovered connection followed by real agent work keeps the normal timeout rule.
+    trajectory.write_text(json.dumps({"steps": [{"source": "agent", "message": "working"}]}))
+    vector, _, rewards = collect_harbor_artifacts(jobs)
+    assert vector["tasks"]["case-a"]["trials"][0]["status"] == "timeout"
+    assert rewards == [0.0]
+
+
 def test_final_retried_verifier_timeout_scores_zero_and_preserves_sibling(tmp_path: Path) -> None:
     jobs = tmp_path / "jobs"
     write_job_config(jobs, max_retries=1, excluded=["AgentTimeoutError"])

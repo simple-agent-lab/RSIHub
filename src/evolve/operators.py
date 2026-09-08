@@ -91,6 +91,22 @@ def run_operator(
 
     run_dir.mkdir(parents=True, exist_ok=True)
     _progress(f"gen/{genid} {name}: started; artifacts: {run_dir}")
+    from .operator_isolation import run_isolated_operator, session_sandbox
+
+    sandbox = session_sandbox(workspace, deadline_s)
+    if sandbox is not None:
+        result = run_isolated_operator(
+            name=name,
+            checkout=checkout,
+            source=source_checkout,
+            workspace=workspace,
+            genid=genid,
+            parent=parent,
+            run_dir=run_dir,
+            config_block=config_block,
+            sandbox=sandbox,
+        )
+        return OperatorResult(name, result.returncode, result.stdout, result.stderr, time.monotonic() - start)
     base_env = (
         {**os.environ, "EVOLVE_HOME": str((run_dir / "operator-home").resolve())}
         if checkout.resolve() != workspace.resolve()

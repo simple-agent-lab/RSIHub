@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import shutil
 import signal
 import subprocess
 import threading
@@ -56,17 +55,25 @@ def _float_value(value: object, default: float) -> float:
         return default
 
 
+def _cancel_grace() -> float:
+    try:
+        outer = float(os.environ.get("EVOLVE_OPERATOR_TIMEOUT_S", ""))
+    except ValueError:
+        return 30.0
+    return min(30.0, max(0.1, outer * 0.25))
+
+
 def _run_timeout() -> float | None:
     try:
         outer = float(os.environ.get("EVOLVE_OPERATOR_TIMEOUT_S", ""))
     except ValueError:
         return None
-    return max(0.1, outer - min(5.0, max(0.5, outer * 0.05)))
+    return max(0.1, outer - _cancel_grace() - min(1.0, outer * 0.05))
 
 
 def _reset_directory(path: Path) -> None:
-    if path.exists():
-        shutil.rmtree(path)
+    if path.exists() and any(path.iterdir()):
+        raise RuntimeError("Harbor job directory already contains evidence; use explicit recovery or a new generation")
     path.mkdir(parents=True, exist_ok=True)
 
 
@@ -118,8 +125,66 @@ def _append_agent_env(command: list[str], checkout: Path, config: dict[str, Any]
         command.extend(["--ae", f"{key}={value}"])
 
 
-def _run_harbor(command: list[str], checkout: Path, log_path: Path, env: dict[str, str]) -> int:
+def _trial_stop_reason(jobs_dir: Path, limits: Mapping[str, int]) -> dict[str, Any] | None:
+    counts = {"errors": 0, "failures": 0}
+    for path in jobs_dir.glob("*/*/result.json"):
+        try:
+            result = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue  # Harbor may be in the middle of writing this result.
+        if not isinstance(result, dict) or not result.get("finished_at"):
+            continue
+        if result.get("exception_info"):
+            counts["errors"] += 1
+        verifier = result.get("verifier_result") or {}
+        rewards = verifier.get("rewards") if isinstance(verifier, dict) else None
+        # Only an explicit zero reward counts; missing scores are not zero.
+        if (
+            isinstance(rewards, dict)
+            and rewards
+            and all(
+                isinstance(value, (int, float)) and not isinstance(value, bool) and value == 0
+                for value in rewards.values()
+            )
+        ):
+            counts["failures"] += 1
+    reached = [name for name, limit in limits.items() if counts[name] >= limit]
+    return {"reached": reached, "counts": counts, "limits": dict(limits)} if reached else None
+
+
+def _run_harbor(
+    command: list[str],
+    checkout: Path,
+    log_path: Path,
+    env: dict[str, str],
+    *,
+    jobs_dir: Path | None = None,
+    stop_limits: Mapping[str, int] | None = None,
+) -> int:
+    limits = dict(stop_limits or {})
+    if limits and (
+        jobs_dir is None
+        or any(
+            key not in {"errors", "failures"} or type(value) is not int or value < 1 for key, value in limits.items()
+        )
+    ):
+        raise ValueError("trial stop limits require a jobs directory and positive error/failure counts")
     start = time.monotonic()
+    timeout = _run_timeout()
+    cancel_path = log_path.with_suffix(".cancel")
+    status_path = log_path.with_suffix(".status.json")
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    def status(phase: str, **fields: Any) -> None:
+        temporary = status_path.with_suffix(".tmp")
+        temporary.write_text(json.dumps({"schema_version": 1, "status": phase, **fields}) + "\n")
+        temporary.chmod(0o600)
+        temporary.replace(status_path)
+
+    if cancel_path.exists():
+        status("cancelled", launched=False)
+        return 130
+    status("starting")
     process = subprocess.Popen(
         command,
         cwd=checkout,
@@ -131,32 +196,66 @@ def _run_harbor(command: list[str], checkout: Path, log_path: Path, env: dict[st
         bufsize=1,
         umask=0o077,
     )
-    chunks: list[str] = []
+    status("running", pid=process.pid)
+    with log_path.open("w") as log:
+        log_path.chmod(0o600)
 
-    def consume_output() -> None:
-        assert process.stdout is not None
-        for line in process.stdout:
-            chunks.append(line)
-            if os.environ.get("EVOLVE_LIVE_OUTPUT") == "1":
-                print(_redact(line), end="", flush=True)
+        def consume_output() -> None:
+            assert process.stdout is not None
+            for line in process.stdout:
+                redacted = _redact(line)
+                log.write(redacted)
+                log.flush()
+                if os.environ.get("EVOLVE_LIVE_OUTPUT") == "1":
+                    print(redacted, end="", flush=True)
 
-    reader = threading.Thread(target=consume_output, daemon=True)
-    reader.start()
-    try:
-        process.wait(timeout=_run_timeout())
-    except subprocess.TimeoutExpired:
+        reader = threading.Thread(target=consume_output, daemon=True)
+        reader.start()
+        reason = None
+        stop_evidence = None
+        forced = False
         try:
-            os.killpg(process.pid, signal.SIGKILL)
-        except OSError:
-            process.kill()
-        process.wait()
-        chunks.append("\nharbor rollout timed out\n")
-    reader.join()
-    output = "".join(chunks)
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    log_path.write_text(_redact(f"wall_s={time.monotonic() - start:.3f}\n{output or ''}"))
-    log_path.chmod(0o600)
-    return process.returncode if process.returncode is not None else 1
+            while process.poll() is None:
+                if limits and jobs_dir is not None:
+                    stop_evidence = _trial_stop_reason(jobs_dir, limits)
+                    if stop_evidence:
+                        reason = "trial_limit"
+                        break
+                if cancel_path.exists():
+                    reason = "cancelled"
+                    break
+                if timeout is not None and time.monotonic() - start >= timeout:
+                    reason = "timed_out"
+                    break
+                try:
+                    process.wait(timeout=0.2)
+                except subprocess.TimeoutExpired:
+                    pass
+        finally:
+            if process.poll() is None:
+                status("cancelling", pid=process.pid, reason=reason or "interrupted")
+                try:
+                    os.killpg(process.pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+                try:
+                    process.wait(timeout=_cancel_grace())
+                except subprocess.TimeoutExpired:
+                    forced = True
+                    os.killpg(process.pid, signal.SIGKILL)
+                    process.wait()
+            reader.join(timeout=5)
+            if reader.is_alive():
+                raise RuntimeError("Harbor output stream remained open after process exit; inspect descendants")
+            log.write(f"\nwall_s={time.monotonic() - start:.3f}\n")
+            status(
+                reason or ("completed" if process.returncode == 0 else "failed"),
+                returncode=process.returncode,
+                forced_termination=forced,
+                stop_evidence=stop_evidence,
+            )
+    assert process.returncode is not None
+    return {"cancelled": 130, "timed_out": 124, "trial_limit": 125}.get(reason, process.returncode)
 
 
 def _select_train_tasks(
@@ -210,6 +309,7 @@ def _completed_rollout(ctx: OperatorContext) -> RolloutResult | None:
         summary = json.loads((rollout_dir / "summary.json").read_text())
         artifacts = json.loads((rollout_dir / "artifacts.json").read_text())
         cases = json.loads((rollout_dir / "cases.json").read_text())
+        harbor_state = json.loads((rollout_dir / "harbor-state.json").read_text())
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return None
     if (
@@ -218,8 +318,11 @@ def _completed_rollout(ctx: OperatorContext) -> RolloutResult | None:
         or not isinstance(artifacts, list)
         or not all(isinstance(item, str) and item for item in artifacts)
         or "rollout/cases.json" not in artifacts
+        or "rollout/harbor-state.json" not in artifacts
         or not isinstance(cases, list)
         or not cases
+        or not isinstance(harbor_state, dict)
+        or harbor_state.get("schema_version") != 1
         or summary.get("tasks_observed") != len(cases)
     ):
         return None

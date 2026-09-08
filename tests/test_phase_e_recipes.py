@@ -15,11 +15,14 @@ SUPPORTED_RECIPES = {
     "hill_climb_codex",
     "hyperagents",
     "hyperagents_codex",
+    "hyperagents_codex_tbench_full",
+    "hyperagents_tbench_full",
 }
-UV_SOURCE_RECIPES = {"ahe", "hill_climb", "hyperagents"}
+UV_SOURCE_RECIPES = {"ahe", "hill_climb", "hyperagents", "hyperagents_tbench_full"}
 MAIN_RECIPES = SUPPORTED_RECIPES - {"gepa_local"}
 TERMINAL_BENCH_DATASET = "terminal-bench-2-30-v1"
-CODEX_IMAGE = "evolve-mutate-codex:20260818-codex0146"
+CODEX_IMAGE = "evolve-mutate-codex:20260904-codex0149"
+MINISWE_IMAGE = "evolve-mutate-app:20260724-tools-mswe245"
 
 
 def _config(name: str) -> str:
@@ -37,8 +40,10 @@ def _operator_config(name: str, stage: str) -> dict[str, object]:
 def test_main_recipes_share_terminal_bench_and_explicit_mutate_images() -> None:
     for name in MAIN_RECIPES:
         config = _parsed_config(name)
-        assert config["evaluator"]["dataset"] == TERMINAL_BENCH_DATASET
-        assert _operator_config(name, "mutate")["image"] == CODEX_IMAGE
+        expected_dataset = "terminal-bench@2.0" if name.endswith("_tbench_full") else TERMINAL_BENCH_DATASET
+        assert config["evaluator"]["dataset"] == expected_dataset
+        expected_image = MINISWE_IMAGE if name in {"hyperagents_tbench_full"} else CODEX_IMAGE
+        assert _operator_config(name, "mutate")["image"] == expected_image
 
 
 def test_all_recipes_are_recipe_artifacts_only() -> None:
@@ -147,6 +152,24 @@ def test_supported_recipes_use_harbor_and_method_mutate() -> None:
             "gate": "parent_eligible",
             "record": "hyperagents",
         },
+        "hyperagents_codex_tbench_full": {
+            "select": "score_child_prop",
+            "rollout": "harbor",
+            "analyze": "trace_browser",
+            "mutate": "hyperagents",
+            "validate": "hyperagents",
+            "gate": "parent_eligible",
+            "record": "hyperagents",
+        },
+        "hyperagents_tbench_full": {
+            "select": "score_child_prop",
+            "rollout": "parent_evaluation",
+            "analyze": "trace_browser",
+            "mutate": "hyperagents",
+            "validate": "hyperagents",
+            "gate": "parent_eligible",
+            "record": "hyperagents",
+        },
     }
     for name in SUPPORTED_RECIPES:
         resolved = resolve_builtin_recipe(name)
@@ -173,16 +196,20 @@ def test_supported_recipes_use_harbor_and_method_mutate() -> None:
             assert config["target"]["seed"] == "builtin-local-smoke"
             assert resolved.operators["validate"].config["criterion"] == "non_decreasing"
             assert mutate["agent"] == "evolve.integrations.harbor.local_auto_agent:LocalAutoAgent"
-        elif name in {"ahe", "hyperagents"}:
+        elif name in {"ahe", "hyperagents", "hyperagents_tbench_full"}:
             assert config["target"]["revision"] == "388da74aad620a384ab47669b17c52133e30e7c3"
-            assert mutate["agent"] == "codex"
+            assert mutate["agent"] == (
+                "evolve.integrations.harbor.miniswe_task_file:InstalledMiniSweAgent"
+                if name == "hyperagents_tbench_full"
+                else "codex"
+            )
         else:
             assert mutate["agent"] == "codex"
 
 
 def test_codex_mutates_use_the_preinstalled_codex_image() -> None:
-    expected = "evolve-mutate-codex:20260818-codex0146"
-    for name in MAIN_RECIPES:
+    expected = CODEX_IMAGE
+    for name in MAIN_RECIPES - {"hyperagents_tbench_full"}:
         assert _operator_config(name, "mutate")["image"] == expected
 
 
@@ -212,6 +239,45 @@ def test_terminal_bench_method_recipes_use_full_curated_dataset() -> None:
     assert ahe_analyze["max_concurrent"] == 10
 
 
+def test_full_terminal_bench_hyperagents_recipe_uses_all_tasks_as_one_cohort() -> None:
+    recipe = _parsed_config("hyperagents_tbench_full")
+    evaluator = recipe["evaluator"]
+    assert recipe["target"]["seed"] == "https://github.com/SWE-agent/mini-swe-agent.git"
+    assert recipe["surface"]["include"] == ["target/**", "operators/**"]
+    assert evaluator["dataset"] == "terminal-bench@2.0"
+    assert "split" not in evaluator
+    assert evaluator["task_scope"] == "full"
+    assert evaluator["evaluation_split"] == "train"
+    assert evaluator["sampling"] == "static"
+    assert evaluator["tasks_per_round"] == 89
+    assert evaluator["repetitions"] == 1
+    assert evaluator["n_concurrent"] == 10
+
+
+def test_full_codex_hyperagents_recipe_uses_train_gate_and_sealed_cohorts() -> None:
+    recipe = _parsed_config("hyperagents_codex_tbench_full")
+    evaluator = recipe["evaluator"]
+    assert recipe["target"]["seed"] == "builtin-codex"
+    assert recipe["surface"]["include"] == ["target/**", "operators/**"]
+    assert evaluator["dataset"] == "terminal-bench@2.0"
+    assert evaluator["split"] == {
+        "train": 50 / 89,
+        "gate": 19 / 89,
+        "sealed": 20 / 89,
+        "seed": 0,
+    }
+    assert evaluator["sampling"] == "static"
+    assert evaluator["tasks_per_round"] == 19
+    assert evaluator["anchor"] == {"final": True, "every_rounds": 0}
+    assert evaluator["repetitions"] == 1
+    assert evaluator["n_concurrent"] == 5
+    rollout = _operator_config("hyperagents_codex_tbench_full", "rollout")
+    assert rollout["budget_tasks"] == 50
+    assert rollout["task_sampling"] == "head"
+    assert rollout["n_concurrent"] == 5
+    assert _operator_config("hyperagents_codex_tbench_full", "mutate")["expose_gate_data"] is False
+
+
 def test_supported_uv_recipes_enable_inline_candidate_runtime_and_task_retry() -> None:
     for name in UV_SOURCE_RECIPES:
         evaluator = _parsed_config(name)["evaluator"]
@@ -227,7 +293,7 @@ def test_supported_uv_recipes_enable_inline_candidate_runtime_and_task_retry() -
 
 
 def test_shared_optimization_recipes_use_native_candidate_agent_timeout() -> None:
-    for name in ("ahe", "hyperagents"):
+    for name in ("ahe", "hyperagents", "hyperagents_tbench_full"):
         evaluator = _parsed_config(name)["evaluator"]
         assert isinstance(evaluator, dict)
         assert evaluator["agent_timeout_multiplier"] == 1
@@ -312,11 +378,16 @@ def test_mutate_required_tools_match_tier_zero_contract() -> None:
 
 def test_codex_mutate_image_pins_the_mutator_cli_version() -> None:
     dockerfile = (ROOT / "containers" / "mutate-codex" / "Dockerfile").read_text()
-    assert dockerfile.startswith(
+    assert (
         "FROM node:22-bookworm-slim@sha256:f32b81066cde10a75dbac96646099533316d94bac4150c55da1636e1f0ffdc46"
+        in dockerfile
     )
-    assert "FROM ubuntu:24.04@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90" in dockerfile
-    assert "ARG CODEX_VERSION=0.146.0" in dockerfile
+    assert (
+        "ARG RUNTIME_BASE=ubuntu:24.04@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90"
+        in dockerfile
+    )
+    assert "ARG INSTALL_TOOLS=1" in dockerfile
+    assert "ARG CODEX_VERSION=0.149.0" in dockerfile
     assert 'npm install --global "@openai/codex@${CODEX_VERSION}"' in dockerfile
     assert dockerfile.count("&& codex --version") == 2
     assert "COPY --from=codex-build /usr/local/bin/node /usr/local/bin/node" in dockerfile
@@ -345,8 +416,25 @@ def test_hyperagents_recipe_matches_reported_miniswe_target_limits() -> None:
     }
 
 
+def test_hyperagents_recipe_configures_reasoning_without_cost_caps() -> None:
+    for name in ("hyperagents_tbench_full",):
+        recipe = _parsed_config(name)
+        assert _operator_config(name, "mutate")["agent_kwargs"] == {
+            "reasoning_effort": "high",
+            "cost_limit": 0,
+            "max_tokens": 64_000,
+        }
+        assert "budget_usd" not in recipe["experiment"]
+        assert recipe["evaluator"]["agent_env"] == {
+            "MINISWE_COST_LIMIT": "0",
+            "MINISWE_ENV_TIMEOUT": "30",
+            "MINISWE_REASONING_EFFORT": "high",
+            "MINISWE_STEP_LIMIT": "100",
+        }
+
+
 def test_benchmark_mutators_use_codex_xhigh() -> None:
-    for name in MAIN_RECIPES:
+    for name in MAIN_RECIPES - {"hyperagents_tbench_full", "hyperagents_codex_tbench_full"}:
         mutate = _operator_config(name, "mutate")
         assert mutate["agent"] == "codex"
         assert mutate["model"] == "gpt-5.4"
@@ -354,7 +442,15 @@ def test_benchmark_mutators_use_codex_xhigh() -> None:
 
 
 def test_recipe_retry_and_partial_floor_defaults_remain_method_specific() -> None:
-    for name in ("ahe", "hill_climb", "hill_climb_codex", "hyperagents", "hyperagents_codex"):
+    for name in (
+        "ahe",
+        "hill_climb",
+        "hill_climb_codex",
+        "hyperagents",
+        "hyperagents_codex",
+        "hyperagents_codex_tbench_full",
+        "hyperagents_tbench_full",
+    ):
         evaluator = _parsed_config(name)["evaluator"]
         assert evaluator["max_retries"] == 1
         assert evaluator["partial_floor"] == 0.8

@@ -13,6 +13,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from evolve.integrations.harbor._time_budget import execution_time_budget
+
 _INFRA_EXCEPTION_MARKERS = (
     "infrastructure",
     "verifier",
@@ -130,6 +132,28 @@ def _outcome(reward: float | None, exception_type: str, pass_threshold: float) -
     if exception_type:
         return "agent_error"
     return "incomplete"
+
+
+def execution_error_summary(cases: list[dict[str, Any]]) -> dict[str, Any]:
+    """Count execution evidence independently of scored task outcomes."""
+    kinds = []
+    exceptions: dict[str, int] = {}
+    for case in cases:
+        exception_type = str((case.get("exception") or {}).get("type") or "")
+        if exception_type:
+            exceptions[exception_type] = exceptions.get(exception_type, 0) + 1
+        kinds.append(_outcome(None, exception_type, 1.0) if exception_type else case.get("outcome"))
+    return {
+        "agent_errors": kinds.count("agent_error"),
+        "infra_errors": kinds.count("infra_error") + kinds.count("incomplete"),
+        "incomplete_tasks": kinds.count("incomplete"),
+        "exception_counts": exceptions,
+        "infra_tasks": [
+            str(case.get("task_name") or case.get("trial_name") or "unknown")
+            for case, kind in zip(cases, kinds, strict=True)
+            if kind in {"infra_error", "incomplete"}
+        ],
+    }
 
 
 def _duration_seconds(value: object) -> float | None:
@@ -546,6 +570,11 @@ def collect_cases(
             reward=reward,
             trajectory=trajectory,
         )
+        native = _read_json(trial_dir / "result.json") if result_path.name == "evolve-replay.json" else payload
+        task_file = tasks_dir / str(payload["task_name"]).rsplit("/", 1)[-1] / "task.toml" if tasks_dir else None
+        evidence["execution"]["time_budget"] = execution_time_budget(
+            native.get("config") or {}, task_file, _duration_seconds(native.get("agent_execution")), exception_type
+        )
         cases.append(
             {
                 "trial_name": str(payload.get("trial_name")),
@@ -577,7 +606,7 @@ def collect_cases(
                     "cost_usd": agent_result.get("cost_usd"),
                 },
                 "timing_s": {
-                    name: _duration_seconds(payload.get(name))
+                    name: _duration_seconds(native.get(name))
                     for name in ("environment_setup", "agent_setup", "agent_execution", "verifier")
                 },
                 "artifact_inventory": _artifact_inventory(trial_dir),
@@ -588,6 +617,8 @@ def collect_cases(
 
 
 def require_rollout_cases(cases: list[dict[str, Any]], *, returncode: int, harbor_log: Path) -> None:
+    if returncode in {124, 125, 130}:
+        raise SystemExit(f"Harbor rollout interrupted (exit {returncode}); evidence retained at {harbor_log.parent}")
     if not cases:
         raise SystemExit(f"harbor rollout produced no trial results (exit {returncode}); see {harbor_log}")
 

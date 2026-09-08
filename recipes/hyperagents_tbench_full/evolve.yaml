@@ -1,0 +1,47 @@
+experiment:
+  id: hyperagents-tbench-full
+  max_generations: 10
+  target_score: null
+  children_per_gen: 1
+  mode: driver
+  seed: 0
+target:
+  seed: https://github.com/SWE-agent/mini-swe-agent.git
+  revision: 388da74aad620a384ab47669b17c52133e30e7c3
+  generate_lock: true
+surface:
+  include:
+    - target/**
+    - operators/**
+  exclude: []
+operators:
+  select: {operator: score_child_prop, config: {seed: 0}}
+  rollout: {operator: parent_evaluation, timeout_s: 600, config: {field_limit: 2000}}
+  analyze: {operator: trace_browser, timeout_s: 600, config: {max_chars: 30000}}
+  mutate: {operator: hyperagents, timeout_s: 21600, config: {runner: harbor, expose_gate_data: false, agent: evolve.integrations.harbor.miniswe_task_file:InstalledMiniSweAgent, model: openai/gpt-5.4-2026-03-05, environment: docker, image: evolve-mutate-app:20260724-tools-mswe245, editable_roots: [target, operators], prompt_path: target/src/minisweagent/config/mini.yaml, skills_dir: target/skills, memory_dir: target/memory, agent_kwargs: {reasoning_effort: high, cost_limit: 0, max_tokens: 64000}, max_retries: 1}}
+  validate: {operator: hyperagents, timeout_s: 300, config: {}}
+  gate: {operator: parent_eligible, config: {}}
+  record: {operator: hyperagents, config: {}}
+  timeout_s: 600
+evaluator:
+  engine: harbor
+  model: openai/gpt-5.4-2026-03-05
+  runtime:
+    candidate: {variant: uv, project: target, python: "3.12"}
+  dataset: terminal-bench@2.0
+  agent: evolve.integrations.harbor.miniswe_candidate:CandidateMiniSweAgent
+  task_scope: full
+  evaluation_split: train
+  sampling: static
+  tasks_per_round: 89
+  repetitions: 1
+  n_concurrent: 10
+  agent_timeout_multiplier: 1
+  max_retries: 1
+  benchmark_timeout_is_zero: true
+  partial_floor: 0.8
+  agent_env:
+    MINISWE_STEP_LIMIT: "100"
+    MINISWE_REASONING_EFFORT: "high"
+    MINISWE_COST_LIMIT: "0"
+    MINISWE_ENV_TIMEOUT: "30"

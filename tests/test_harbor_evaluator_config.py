@@ -123,9 +123,9 @@ def test_eval_env_and_environment_kwargs_render_local_backend() -> None:
 
     assert "EVOLVE_HARBOR_ENVIRONMENT=evolve.harbor_local:LocalEnvironment\n" in env
     assert "EVOLVE_EXECUTION_BACKEND=local\n" in env
-    assert workspace_module._environment_kwargs({"workdir": "/workspace", "options": {"clean": True}}) == (
-        'options={"clean":true}\nworkdir="/workspace"\n'
-    )
+    assert workspace_module._runtime_kwargs(
+        {"workdir": "/workspace", "options": {"clean": True}}, "environment_kwargs"
+    ) == ('options={"clean":true}\nworkdir="/workspace"\n')
 
 
 def test_agent_env_renders_frozen_miniswe_limits_deterministically() -> None:
@@ -155,9 +155,9 @@ def test_agent_env_rejects_unsafe_values(value: object, message: str) -> None:
 
 def test_environment_kwargs_rejects_invalid_input() -> None:
     with pytest.raises(ValueError, match="must be a mapping"):
-        workspace_module._environment_kwargs(["bad"])
+        workspace_module._runtime_kwargs(["bad"], "environment_kwargs")
     with pytest.raises(ValueError, match="invalid evaluator.environment_kwargs name"):
-        workspace_module._environment_kwargs({"bad-name": True})
+        workspace_module._runtime_kwargs({"bad-name": True}, "environment_kwargs")
 
 
 def test_init_real_harbor_recipe_requires_evaluator_agent(tmp_path: Path) -> None:

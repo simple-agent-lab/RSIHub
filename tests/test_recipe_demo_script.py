@@ -158,6 +158,60 @@ def test_recipe_demo_loads_the_optional_env_file(tmp_path: Path) -> None:
     ]
 
 
+def test_full_hyperagents_demo_uses_the_official_export_without_rebuilding_subset(tmp_path: Path) -> None:
+    fake_bin, calls_path = _fake_uv(tmp_path)
+    assets = _assets(tmp_path)
+    workspace = tmp_path / "workspace"
+
+    subprocess.run(
+        ["bash", str(SCRIPT), "hyperagents_tbench_full"],
+        check=True,
+        cwd=tmp_path,
+        env=_environment(fake_bin, calls_path, EVOLVE_ASSET_DIR=str(assets), WORKSPACE=str(workspace)),
+    )
+
+    calls = _calls(calls_path)
+    assert not any("scripts/examples/terminal_bench_smoke/prepare_dataset.py" in call for call in calls)
+    assert calls[1] == [
+        "run",
+        "--frozen",
+        "evolve",
+        "init",
+        str(workspace),
+        "--recipe",
+        "hyperagents_tbench_full",
+        "--dataset",
+        str(assets / "raw" / "terminal-bench"),
+    ]
+
+
+def test_full_codex_hyperagents_demo_uses_the_official_export(tmp_path: Path) -> None:
+    fake_bin, calls_path = _fake_uv(tmp_path)
+    assets = _assets(tmp_path)
+    workspace = tmp_path / "workspace"
+
+    subprocess.run(
+        ["bash", str(SCRIPT), "hyperagents_codex_tbench_full"],
+        check=True,
+        cwd=tmp_path,
+        env=_environment(fake_bin, calls_path, EVOLVE_ASSET_DIR=str(assets), WORKSPACE=str(workspace)),
+    )
+
+    calls = _calls(calls_path)
+    assert not any("scripts/examples/terminal_bench_smoke/prepare_dataset.py" in call for call in calls)
+    assert calls[1] == [
+        "run",
+        "--frozen",
+        "evolve",
+        "init",
+        str(workspace),
+        "--recipe",
+        "hyperagents_codex_tbench_full",
+        "--dataset",
+        str(assets / "raw" / "terminal-bench"),
+    ]
+
+
 def test_recipe_demo_resolves_relative_overrides_from_the_callers_directory(tmp_path: Path) -> None:
     fake_bin, calls_path = _fake_uv(tmp_path)
     assets = _assets(tmp_path / "caller")

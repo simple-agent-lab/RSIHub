@@ -36,7 +36,7 @@ if name == "docker":
         raise SystemExit(0)
     if args[:1] == ["build"]:
         image = args[args.index("-t") + 1]
-        images[image] = "2.4.5" if "mutate-app" in image else "0.146.0"
+        images[image] = "2.4.5" if "mutate-app" in image else "0.149.0"
         state.write_text(json.dumps(images))
         raise SystemExit(0)
     raise SystemExit(2)
@@ -181,7 +181,7 @@ def test_setup_downloads_once_and_builds_codex_image_for_ahe(tmp_path: Path) -> 
     )
     builds = [call for call in calls if call[:2] == ["docker", "build"]]
     assert len(builds) == 1
-    assert "evolve-mutate-codex:20260818-codex0146" in builds[0]
+    assert "evolve-mutate-codex:20260904-codex0149" in builds[0]
     assert "./scripts/run_recipe_demo.sh ahe" in second.stdout
 
 
@@ -190,12 +190,44 @@ def test_setup_builds_codex_image_for_gepa(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     build = next(call for call in calls if call[:2] == ["docker", "build"])
-    assert "evolve-mutate-codex:20260818-codex0146" in build
+    assert "evolve-mutate-codex:20260904-codex0149" in build
+
+
+def test_setup_reuses_provisioned_codex_image_when_available(tmp_path: Path) -> None:
+    environment, calls_path = _environment(tmp_path)
+    Path(environment["DOCKER_STATE"]).write_text(json.dumps({"evolve-mutate-codex:20260818-codex0146": "0.146.0"}))
+
+    result = subprocess.run(
+        ["bash", str(SCRIPT), "gepa"], cwd=ROOT, env=environment, text=True, capture_output=True, check=False
+    )
+
+    assert result.returncode == 0, result.stderr
+    build = next(call for call in _calls(calls_path) if call[:2] == ["docker", "build"])
+    assert ["--build-arg", "RUNTIME_BASE=evolve-mutate-codex:20260818-codex0146"] == build[4:6]
+    assert ["--build-arg", "INSTALL_TOOLS=0"] == build[6:8]
+
+
+def test_setup_supports_full_hyperagents_with_the_official_export(tmp_path: Path) -> None:
+    result, calls = _run(tmp_path, "hyperagents_tbench_full")
+
+    assert result.returncode == 0, result.stderr
+    build = next(call for call in calls if call[:2] == ["docker", "build"])
+    assert "evolve-mutate-app:20260724-tools-mswe245" in build
+    assert str(tmp_path / "assets" / "raw" / "terminal-bench") in result.stdout
+
+
+def test_setup_supports_full_codex_hyperagents_with_the_official_export(tmp_path: Path) -> None:
+    result, calls = _run(tmp_path, "hyperagents_codex_tbench_full")
+
+    assert result.returncode == 0, result.stderr
+    build = next(call for call in calls if call[:2] == ["docker", "build"])
+    assert "evolve-mutate-codex:20260904-codex0149" in build
+    assert str(tmp_path / "assets" / "raw" / "terminal-bench") in result.stdout
 
 
 def test_setup_rebuilds_a_stale_image_with_the_expected_tag(tmp_path: Path) -> None:
     environment, calls_path = _environment(tmp_path)
-    Path(environment["DOCKER_STATE"]).write_text(json.dumps({"evolve-mutate-codex:20260818-codex0146": "stale"}))
+    Path(environment["DOCKER_STATE"]).write_text(json.dumps({"evolve-mutate-codex:20260904-codex0149": "stale"}))
 
     result = subprocess.run(
         ["bash", str(SCRIPT), "gepa"], cwd=ROOT, env=environment, text=True, capture_output=True, check=False

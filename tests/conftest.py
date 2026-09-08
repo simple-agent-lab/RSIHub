@@ -24,7 +24,7 @@ from evolve.workspace import init_workspace as create_workspace
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_RECIPES = ROOT / "tests" / "fixtures" / "recipes"
 FIXTURE_SEEDS = ROOT / "tests" / "fixtures" / "seeds"
-UV_SOURCE_RECIPES = {"ahe", "hill_climb", "hyperagents"}
+UV_SOURCE_RECIPES = {"ahe", "hill_climb", "hyperagents", "hyperagents_tbench_full"}
 
 
 class _FixtureRegistryClient:

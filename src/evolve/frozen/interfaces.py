@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import math
+import os
 import random
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass, is_dataclass
@@ -38,7 +40,16 @@ class OperatorContext:
 class ArchiveView:
     workspace: Path
 
+    def _projection(self) -> dict[str, Any] | None:
+        path = os.environ.get("EVOLVE_PUBLIC_ARCHIVE")
+        if path and Path(path).parent == self.workspace:
+            return json.loads(Path(path).read_text())
+        return None
+
     def rows(self) -> list[Row]:
+        projection = self._projection()
+        if projection is not None:
+            return projection["rows"]
         from ..config import experiment_id
 
         workspace = self.workspace.resolve()
@@ -46,6 +57,9 @@ class ArchiveView:
         return merged_rows(archive_path(workspace))
 
     def valid_parents(self) -> list[Row]:
+        projection = self._projection()
+        if projection is not None:
+            return projection["valid_parents"]
         expected = fixed_evaluation_identity(self.workspace)
         if expected is None:
             return []

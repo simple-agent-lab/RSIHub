@@ -12,7 +12,10 @@ from typing import cast
 import typer
 from dotenv import dotenv_values
 
+from .agent_cli import build_agent_app
 from .archive import archive_path, merged_rows, verify_integrity
+from .candidate.execution import run_candidate_package
+from .candidate.package import export_candidate
 from .candidate.smoke import run_candidate_smoke
 from .composition.cli import build_recipe_app
 from .config import DEFAULT_RECIPE, RECIPE_NAMES, experiment_int
@@ -27,6 +30,7 @@ from .orchestration import commit_agent_child, eval_agent_child, fork_agent_chil
 from .population import best_row, fixed_evaluation_identity
 from .report import format_report, format_status
 from .run_summary import assert_run_success, write_run_summary
+from .runtime.sandbox import SandboxConfig
 from .surface import check_paths, surface_patterns
 from .workspace import InitOptions, init_workspace
 
@@ -73,6 +77,7 @@ def _guard(fn):
 
 
 app.add_typer(build_recipe_app(_guard), name="recipe")
+app.add_typer(build_agent_app(_guard), name="agent")
 attach_orchestration_commands(app, _guard, _workspace_environment, _enable_live_output)
 
 
@@ -281,6 +286,32 @@ def retry(workspace: Path, genid: str) -> None:
     print(f"Retried gen/{genid}: {record.outcome.value} (attempt {record.attempt})")
 
 
+@app.command("harbor-resume")
+@_guard
+def harbor_resume(
+    job: Path,
+    config_sha256: str = typer.Option(..., "--config-sha256"),
+    owner_status: Path = typer.Option(..., "--owner-status"),
+    error_type: list[str] = typer.Option(..., "--error-type"),
+    timeout_s: float = typer.Option(3600, "--timeout-s", min=0.1),
+) -> None:
+    """Back up a stopped Harbor job, then resume its saved configuration in place."""
+    from .integrations.harbor._recovery import resume_job
+
+    receipt = resume_job(
+        job,
+        config_sha256=config_sha256,
+        owner_status=owner_status,
+        harbor_command=["harbor"],
+        cwd=Path.cwd(),
+        error_types=error_type,
+        timeout_s=timeout_s,
+    )
+    print(json.dumps(receipt))
+    if receipt["status"] != "completed":
+        raise typer.Exit(1)
+
+
 @app.command()
 @_guard
 def record(
@@ -307,6 +338,42 @@ def surface_check(
     violations = check_paths(mutated, include, exclude)
     print({"ok": not violations, "mutated": mutated, "violations": violations})
     if violations:
+        raise typer.Exit(1)
+
+
+@app.command("candidate-export")
+@_guard
+def candidate_export(
+    workspace: Path = typer.Argument(Path(".")),
+    reference: str = typer.Option("gen/0", "--ref"),
+    output: Path = typer.Option(..., "--output"),
+) -> None:
+    """Export only committed target files with a pinned package manifest."""
+    receipt = export_candidate(workspace, reference, output)
+    print(json.dumps(receipt, sort_keys=True))
+
+
+@app.command("candidate-run")
+@_guard
+def candidate_run(
+    package: Path = typer.Argument(...),
+    digest: str = typer.Option(..., "--sha256"),
+    image: str = typer.Option(..., "--image"),
+    command: str = typer.Option(..., "--command"),
+    argument: list[str] = typer.Option([], "--arg"),
+    output: Path = typer.Option(..., "--output"),
+    timeout: float = typer.Option(60.0, "--timeout"),
+) -> None:
+    """Execute a verified package offline; /input is read-only, /output writable."""
+    receipt = run_candidate_package(
+        package,
+        digest=digest,
+        config=SandboxConfig(image, timeout),
+        command=[command, *argument],
+        run_dir=output,
+    )
+    print(json.dumps(receipt, sort_keys=True))
+    if receipt["status"] != "completed":
         raise typer.Exit(1)
 
 

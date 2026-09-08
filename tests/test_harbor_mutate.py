@@ -414,6 +414,10 @@ def test_visible_run_inputs_do_not_merge_current_generation_twice(tmp_path: Path
     snapshot = run_dir / "rollout" / "certified-jobs" / "snapshot" / "job"
     snapshot.mkdir(parents=True)
     (snapshot / "result.json").write_text('{"reward": 1}\n')
+    (run_dir / "rollout" / "harbor-state.json").write_text('{"schema_version": 1}\n')
+    feedback = run_dir / "feedback" / "evidence"
+    feedback.mkdir(parents=True)
+    (feedback / "harbor-state.json").write_text('{"schema_version": 1}\n')
     for path in (snapshot, snapshot.parent):
         path.chmod(0o555)
     destination = tmp_path / "bundle"
@@ -427,6 +431,8 @@ def test_visible_run_inputs_do_not_merge_current_generation_twice(tmp_path: Path
     copied_snapshot = destination / "runs" / "gen-1" / "rollout" / "certified-jobs" / "snapshot"
     assert stat.S_IMODE(copied_snapshot.stat().st_mode) & stat.S_IWUSR
     assert stat.S_IMODE((copied_snapshot / "job" / "result.json").stat().st_mode) == 0o644
+    assert (destination / "runs" / "gen-1" / "rollout" / "harbor-state.json").is_file()
+    assert (destination / "runs" / "gen-1" / "feedback" / "evidence" / "harbor-state.json").is_file()
 
 
 def _install_fake_harbor(bin_dir: Path) -> Path:

@@ -47,9 +47,17 @@ recipe YAML
 ```
 
 The framework ships `aevolve`, `ahe`, `ahe_codex`, `gepa`, `gepa_local`,
-`hill_climb`, `hill_climb_codex`, `hyperagents`, and `hyperagents_codex`.
+`hill_climb`, `hill_climb_codex`, `hyperagents`, `hyperagents_codex`, and
+the full-benchmark profiles `hyperagents_tbench_full` and
+`hyperagents_codex_tbench_full`.
 Development smoke recipes live under `tests/fixtures/recipes/` and are not part
 of the public recipe inventory.
+
+Harbor rollouts publish a versioned, facts-only runtime state artifact alongside
+the method-neutral cases. The feedback bundle makes train-role state available
+to mutators without adding a planner, diagnostic replay, or other algorithmic
+stage. The publisher records provenance and explicit unavailability; it does
+not convert runtime observations into diagnoses or mutation recommendations.
 
 ## Declarative operator configuration
 

@@ -51,6 +51,7 @@ def test_evolve_agent_progressive_references_resolve() -> None:
         "references/gepa.md",
         "references/ahe.md",
         "references/hyperagents.md",
+        "references/agent-driven.md",
         "references/scientific-foundations.md",
     ]
     assert all((SKILL / link).is_file() for link in links)
