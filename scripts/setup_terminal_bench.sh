@@ -2,7 +2,6 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-source "$ROOT/containers/runtime-versions.env"
 RECIPE=${1:-}
 CALLER=$PWD
 ASSET_ROOT=${EVOLVE_ASSET_DIR:-$ROOT/.evolve-assets/terminal-bench-2.0}
@@ -22,19 +21,12 @@ cleanup() {
 trap cleanup EXIT
 
 case "$RECIPE" in
-  hyperagents_tbench_full)
-    IMAGE=$MINISWE_IMAGE
-    IMAGE_CONTEXT=$ROOT/containers/mutate
-    BUILD_ARGS=(--build-arg "MINISWE_VERSION=$MINISWE_VERSION")
-    ;;
-  aevolve|ahe|hyperagents|ahe_codex|gepa|hill_climb|hill_climb_codex|hyperagents_codex|hyperagents_codex_tbench_full)
-    IMAGE=$CODEX_IMAGE
-    IMAGE_CONTEXT=$ROOT/containers/mutate-codex
-    BUILD_ARGS=(--build-arg "CODEX_VERSION=$CODEX_VERSION")
-    ;;
+  aevolve|ahe|hyperagents|ahe_codex|gepa|hill_climb|hill_climb_codex|hyperagents_codex|hyperagents_tbench_full|hyperagents_codex_tbench_full) ;;
   *)
-    echo "unsupported recipe '$RECIPE'; supported recipes: aevolve, ahe, ahe_codex, gepa, hill_climb, hill_climb_codex, hyperagents, hyperagents_codex, hyperagents_tbench_full, hyperagents_codex_tbench_full" >&2
-    exit 2
+    [[ -f "$RECIPE" || -f "$RECIPE/evolve.yaml" ]] || {
+      echo "unsupported recipe; supported recipes are Terminal-Bench profiles or a recipe YAML path" >&2; exit 2;
+    }
+    [[ $RECIPE == /* ]] || RECIPE=$CALLER/$RECIPE
     ;;
 esac
 
@@ -54,6 +46,19 @@ docker info >/dev/null 2>&1 || { echo "Docker daemon is unavailable" >&2; exit 2
 
 cd "$ROOT"
 uv sync --frozen
+RUNTIME=$(uv run --frozen python scripts/recipe_runtime.py "$RECIPE")
+IFS=$'\t' read -r RUNTIME_KIND IMAGE_VERSION IMAGE <<<"$RUNTIME"
+case "$RUNTIME_KIND" in
+  codex)
+    IMAGE_CONTEXT=$ROOT/containers/mutate-codex
+    BUILD_ARGS=(--build-arg "CODEX_VERSION=$IMAGE_VERSION")
+    ;;
+  miniswe)
+    IMAGE_CONTEXT=$ROOT/containers/mutate
+    BUILD_ARGS=(--build-arg "MINISWE_VERSION=$IMAGE_VERSION")
+    ;;
+  *) echo "unsupported recipe runtime" >&2; exit 2 ;;
+esac
 mkdir -p "$ASSET_ROOT"
 if [[ ! -d "$RAW_DATASET/terminal-bench" ]]; then
   [[ ! -e "$RAW_DATASET" ]] || { echo "incomplete raw dataset directory exists: $RAW_DATASET" >&2; exit 2; }
@@ -70,4 +75,8 @@ uv run --frozen python scripts/examples/terminal_bench_smoke/prepare_dataset.py 
 docker build "${BUILD_ARGS[@]}" -t "$IMAGE" "$IMAGE_CONTEXT"
 
 echo "Terminal-Bench 2.0 setup is ready at $READY_DATASET"
-echo "EVOLVE_ASSET_DIR=\"$ASSET_ROOT\" ./scripts/run_recipe_demo.sh $RECIPE"
+if [[ -e "$RECIPE" ]]; then
+  echo "Use evolve init --recipe-path with your recipe directory and an explicit --dataset path."
+else
+  echo "EVOLVE_ASSET_DIR=\"$ASSET_ROOT\" ./scripts/run_recipe_demo.sh $RECIPE"
+fi

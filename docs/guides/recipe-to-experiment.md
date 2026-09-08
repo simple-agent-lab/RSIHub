@@ -26,14 +26,52 @@ Terminal-Bench subset and builds the selected mutation-agent image:
 ./scripts/setup_terminal_bench.sh gepa
 ```
 
-For a custom recipe, prepare the Docker image named by the recipe yourself.
+The helper also accepts a custom recipe directory or YAML path when its mutation
+agent is Codex or the installed MiniSWE adapter:
 
-Runtime version pins live in `containers/runtime-versions.env`. The setup script
-reads these pins and always builds from the declared Dockerfile and pinned base;
-Docker's matching build layers provide caching. It does not substitute a locally
-available older image or trust its version label to skip the build. Standalone
-Dockerfile, seed and controller defaults are checked against the manifest by
-`tests/test_runtime_version_pins.py`; update them together when changing a pin.
+```bash
+./scripts/setup_terminal_bench.sh /absolute/path/to/my-recipe/evolve.yaml
+```
+
+For Codex, set the version in the existing recipe fields. This is a fragment to
+merge into a complete recipe; retain its other operator and evaluator settings:
+
+```yaml
+operators:
+  mutate:
+    config:
+      agent: codex
+      image: my-codex:0.150.0
+      agent_kwargs:
+        version: "0.150.0"
+evaluator:
+  agent_kwargs:
+    version: "0.143.0"
+```
+
+`operators.mutate.config.agent_kwargs.version` selects the mutation agent's CLI
+and the setup script's `CODEX_VERSION` Docker build argument.
+`evaluator.agent_kwargs.version` independently overrides the Codex target seed's
+version. Use an exact three-part version string and a distinct image tag when
+changing the mutation version; the helper rejects a mismatch with a reserved
+built-in tag. Availability of the selected package is checked during the build.
+For other mutation adapters, prepare the image yourself.
+
+Existing recipes keep mutation Codex 0.146.0 and seed Codex 0.143.0 defaults.
+`hyperagents_codex_tbench_full` explicitly selects 0.149.0 for both roles.
+The outer Codex controller is separate: its `--require-version` option defaults
+to 0.149.0 and checks the installed host CLI; it does not install it.
+Initialize a fresh workspace to apply recipe changes; existing frozen experiment
+configuration is not rewritten.
+
+Role-specific defaults live in `containers/runtime-versions.env`; standalone
+Dockerfile, seed and controller defaults are checked against it by
+`tests/test_runtime_version_pins.py`. The setup helper builds the selected tag
+from the declared Dockerfile; Docker's matching layers provide caching. It does
+not skip the build merely because a local tag exists. An already prepared image
+can still be used by initializing and running an experiment without invoking
+setup. Custom recipes use the commands below with an explicit dataset path;
+`run_recipe_demo.sh` accepts only the built-in profiles.
 
 ## 2. Check the recipe and run prospective preflight
 

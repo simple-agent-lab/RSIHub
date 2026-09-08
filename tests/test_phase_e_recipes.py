@@ -21,7 +21,8 @@ SUPPORTED_RECIPES = {
 UV_SOURCE_RECIPES = {"ahe", "hill_climb", "hyperagents", "hyperagents_tbench_full"}
 MAIN_RECIPES = SUPPORTED_RECIPES - {"gepa_local"}
 TERMINAL_BENCH_DATASET = "terminal-bench-2-30-v1"
-CODEX_IMAGE = "evolve-mutate-codex:20260904-codex0149"
+CODEX_IMAGE = "evolve-mutate-codex:20260818-codex0146"
+CODEX_FULL_IMAGE = "evolve-mutate-codex:20260904-codex0149"
 MINISWE_IMAGE = "evolve-mutate-app:20260724-tools-mswe245"
 
 
@@ -43,6 +44,8 @@ def test_main_recipes_share_terminal_bench_and_explicit_mutate_images() -> None:
         expected_dataset = "terminal-bench@2.0" if name.endswith("_tbench_full") else TERMINAL_BENCH_DATASET
         assert config["evaluator"]["dataset"] == expected_dataset
         expected_image = MINISWE_IMAGE if name in {"hyperagents_tbench_full"} else CODEX_IMAGE
+        if name == "hyperagents_codex_tbench_full":
+            expected_image = CODEX_FULL_IMAGE
         assert _operator_config(name, "mutate")["image"] == expected_image
 
 
@@ -208,8 +211,8 @@ def test_supported_recipes_use_harbor_and_method_mutate() -> None:
 
 
 def test_codex_mutates_use_the_preinstalled_codex_image() -> None:
-    expected = CODEX_IMAGE
     for name in MAIN_RECIPES - {"hyperagents_tbench_full"}:
+        expected = CODEX_FULL_IMAGE if name == "hyperagents_codex_tbench_full" else CODEX_IMAGE
         assert _operator_config(name, "mutate")["image"] == expected
 
 
@@ -387,7 +390,7 @@ def test_codex_mutate_image_pins_the_mutator_cli_version() -> None:
         in dockerfile
     )
     assert "ARG INSTALL_TOOLS=1" in dockerfile
-    assert "ARG CODEX_VERSION=0.149.0" in dockerfile
+    assert "ARG CODEX_VERSION=0.146.0" in dockerfile
     assert 'npm install --global "@openai/codex@${CODEX_VERSION}"' in dockerfile
     assert dockerfile.count("&& codex --version") == 2
     assert "COPY --from=codex-build /usr/local/bin/node /usr/local/bin/node" in dockerfile

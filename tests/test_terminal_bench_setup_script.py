@@ -7,6 +7,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+import yaml
+
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "setup_terminal_bench.sh"
 
@@ -14,6 +17,7 @@ FAKE_TOOL = r"""#!/usr/bin/env python3
 import json
 import os
 import sys
+import subprocess
 from pathlib import Path
 
 name = Path(sys.argv[0]).name
@@ -51,6 +55,8 @@ if name == "uv":
         if os.environ.get("FAIL_DOWNLOAD") == "1":
             raise SystemExit(9)
         raise SystemExit(0)
+    if command[:2] == ["python", "scripts/recipe_runtime.py"]:
+        raise SystemExit(subprocess.run([sys.executable, *command[1:]]).returncode)
     if command[:1] == ["python"]:
         destination = Path(command[-1])
         destination.mkdir(parents=True, exist_ok=True)
@@ -181,7 +187,7 @@ def test_setup_downloads_once_and_builds_codex_image_for_ahe(tmp_path: Path) -> 
     )
     builds = [call for call in calls if call[:2] == ["docker", "build"]]
     assert len(builds) == 2
-    assert "evolve-mutate-codex:20260904-codex0149" in builds[0]
+    assert "evolve-mutate-codex:20260818-codex0146" in builds[0]
     assert "./scripts/run_recipe_demo.sh ahe" in second.stdout
 
 
@@ -190,7 +196,7 @@ def test_setup_builds_codex_image_for_gepa(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     build = next(call for call in calls if call[:2] == ["docker", "build"])
-    assert "evolve-mutate-codex:20260904-codex0149" in build
+    assert "evolve-mutate-codex:20260818-codex0146" in build
 
 
 def test_setup_ignores_legacy_base_image_when_available(tmp_path: Path) -> None:
@@ -227,7 +233,7 @@ def test_setup_supports_full_codex_hyperagents_with_the_official_export(tmp_path
 
 def test_setup_rebuilds_a_stale_image_with_the_expected_tag(tmp_path: Path) -> None:
     environment, calls_path = _environment(tmp_path)
-    Path(environment["DOCKER_STATE"]).write_text(json.dumps({"evolve-mutate-codex:20260904-codex0149": "stale"}))
+    Path(environment["DOCKER_STATE"]).write_text(json.dumps({"evolve-mutate-codex:20260818-codex0146": "stale"}))
 
     result = subprocess.run(
         ["bash", str(SCRIPT), "gepa"], cwd=ROOT, env=environment, text=True, capture_output=True, check=False
@@ -250,3 +256,39 @@ def test_setup_script_is_portable_bash() -> None:
     result = subprocess.run(["bash", "-n", str(SCRIPT)], text=True, capture_output=True, check=False)
     assert result.returncode == 0, result.stderr
     assert sys.platform in {"darwin", "linux"}
+
+
+def _custom_recipe(tmp_path: Path, version: object, image: str) -> Path:
+    config = yaml.safe_load((ROOT / "recipes/gepa/evolve.yaml").read_text())
+    mutate = config["operators"]["mutate"]["config"]
+    mutate.setdefault("agent_kwargs", {})["version"] = version
+    mutate["image"] = image
+    recipe = tmp_path / "custom.yaml"
+    recipe.write_text(yaml.safe_dump(config))
+    return recipe
+
+
+def test_setup_builds_the_version_and_tag_selected_by_custom_recipe(tmp_path: Path) -> None:
+    recipe = _custom_recipe(tmp_path, "0.150.0", "custom/codex:0150")
+    result, calls = _run(tmp_path, str(recipe))
+    assert result.returncode == 0, result.stderr
+    build = next(call for call in calls if call[:2] == ["docker", "build"])
+    assert "CODEX_VERSION=0.150.0" in build
+    assert build[build.index("-t") + 1] == "custom/codex:0150"
+    assert "run_recipe_demo.sh" not in result.stdout
+
+
+@pytest.mark.parametrize(
+    "version,image",
+    [
+        ("latest", "custom/codex:test"),
+        (None, "custom/codex:test"),
+        ("0.150.0", "evolve-mutate-codex:20260818-codex0146"),
+    ],
+)
+def test_setup_rejects_invalid_version_before_download_or_build(tmp_path: Path, version: object, image: str) -> None:
+    recipe = _custom_recipe(tmp_path, version, image)
+    result, calls = _run(tmp_path, str(recipe))
+    assert result.returncode != 0
+    assert "version" in result.stderr
+    assert not any(call[:2] == ["docker", "build"] or "download" in call for call in calls)

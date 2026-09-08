@@ -131,7 +131,7 @@ def test_builtin_codex_wrapper_injects_skills_and_opt_in_compaction(tmp_path: Pa
 
     agent = module.HarborAgent(logs_dir=tmp_path / "logs")
     assert agent.model_name == "gpt-5.4"
-    assert agent.kwargs["version"] == "0.149.0"
+    assert agent.kwargs["version"] == "0.143.0"
     assert agent.kwargs["skills_dir"] == "/tmp/evolve-target-skills"
     assert "auto_compact_token_limit" not in agent.kwargs
     assert {flag.kwarg for flag in agent.CLI_FLAGS} >= {
@@ -487,3 +487,10 @@ def test_codex_missing_budget_does_not_invent_a_deadline(tmp_path, monkeypatch):
     assert "time limit: unavailable" in agent.render_instruction("Task")
     command = asyncio.run(agent.exec_as_agent(object(), "codex exec -- task"))
     assert "EVOLVE_AGENT_DEADLINE_UNIX=" not in command
+
+
+def test_explicit_evaluator_version_overrides_codex_seed_default(tmp_path: Path, monkeypatch) -> None:
+    _install_fake_harbor(monkeypatch)
+    module = _load_target_agent(Path(__file__).resolve().parents[1] / "seeds/codex/agent.py")
+    agent = module.HarborAgent(logs_dir=tmp_path / "logs", version="0.150.0")
+    assert agent.kwargs["version"] == "0.150.0"

@@ -1,6 +1,6 @@
 [codex]
 model = "gpt-5.4"
-version = "0.149.0"
+version = "0.143.0"
 reasoning_effort = "high"
 reasoning_summary = "auto"
 web_search = "disabled"
