@@ -1,0 +1,54 @@
+# Frozen Harbor rollout overlay — applied as DeepSeekHarness patches= on top of
+# profile sdk-minimal. Candidates cannot edit this file.
+#
+# Keeps the Harbor seams outside the evolvable surface:
+#   1. jsonrpc-server (already in sdk-minimal)
+#   2. pinned model (SDK initialize + llm-deepseek below)
+#   3. bash → docker exec into the task container (terminal-bash)
+#   4. session persistence under the isolated dsh_home (sdk-minimal default)
+#
+# The candidate profile is NOT included from checkout/target/ (that breaks
+# Node package resolution). The rollout driver writes it as a second --patch
+# under dsh_home after rewriting ./plugins/* to absolute paths.
+#
+# Runtime variables (injected by DshAgent / rollout_driver):
+#   DSH_CONTAINER / DSH_CONTAINER_CWD / DSH_DOCKER_BIN / DSH_MODEL
+
+# Route shell-backed tools into the Harbor task container.
+- id: terminal-bash
+  config:
+    backendType: shell
+    shellPath: !!js process.env.DSH_DOCKER_BIN ?? '/usr/bin/docker'
+    shellArgs:
+      - exec
+      - -i
+      - -t
+      - -e
+      - PS1
+      - -e
+      - PROMPT_COMMAND
+      - -e
+      - TERM
+      - -e
+      - PAGER
+      - -e
+      - GIT_PAGER
+      - -w
+      - !!js process.env.DSH_CONTAINER_CWD ?? '/app'
+      - !!js process.env.DSH_CONTAINER
+      - /bin/bash
+      - --noprofile
+      - --norc
+      - -i
+    idleSilenceMs: 500
+    handoffGraceMs: 250
+    timeoutMs: 300000
+
+# Prefer the evaluator-pinned model id when the adapter exports DSH_MODEL.
+- id: llm-deepseek
+  config:
+    apiKeyEnv: DEEPSEEK_API_KEY
+    streamIdleTimeoutMs: 600000
+    models:
+      - id: !!js process.env.DSH_MODEL ?? 'deepseek-v4-flash'
+        contextWindow: !!js Number(process.env.DSH_CONTEXT_WINDOW ?? 1000000)

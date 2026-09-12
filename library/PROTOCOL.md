@@ -255,7 +255,7 @@ point to these entry files:
 - analyze: `ahe`, `artifact_rubric`, `failure_patterns`, `gepa`,
   `trace_browser`, `trajectory_only`
 - mutate: `aevolve`, `ahe`, `gepa`, `hyperagents` (`runner`: `local` or `harbor`)
-- validate: `hyperagents`, `minibatch_improvement`
+- validate: `hyperagents`, `minibatch_improvement`, `node_check`
 - novelty: `accept_all`, `diff_similarity`
 - gate: `ahe_artifact_valid`, `hillclimb`, `parent_eligible`
 - record: `gepa`, `hyperagents`, `jsonl`

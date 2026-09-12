@@ -1,0 +1,44 @@
+# Mutation-session overlay — FROZEN. Applied as DeepSeekHarness patches= on
+# profile sdk-minimal. dsh runs on the host; cwd = the candidate profile inside
+# the child worktree. The task: read failure evidence and improve persona /
+# plugins / skills ("dsh writes plugins for itself").
+#
+# Only packages that ship in sdk-minimal are referenced here so mutate boots
+# against the same built runtime as rollout. File edits go through
+# persistent-bash (sed/tee/cp); cordis in-memory prototyping tools are not
+# part of sdk-minimal.
+#
+# Environment:
+#   DSH_MODEL             meta model (default deepseek-v4-pro)
+#   DSH_CWD / DSH_HOME    injected by the SDK (cwd + isolated harness home)
+
+- id: sandbox-policy
+  config:
+    # Confine meta-session filesystem effects to the candidate profile root.
+    mode: workspace-write
+    workspaceRoot: !!js process.env.DSH_CWD ?? process.cwd()
+
+# Self-improvement persona — patches sdk-minimal's system-prompt row.
+- id: system-prompt
+  config:
+    includeHarnessIdentity: false
+    includeRuntimeContext: false
+    personaPrefix: |-
+      You are the self-improvement engineer of an agent harness. The current working
+      directory is your own agent profile: profile.cordis.yml composes you, plugins/
+      holds your plugin source files, skills/ holds your skill packages. You will be
+      given evaluation evidence (failed task trajectories) and your job is to improve
+      this profile so the agent solves more tasks. You may edit the persona, write or
+      revise plugins, and add or refine skills. Keep changes focused and justified by
+      the evidence; record your reasoning in EVOLUTION_LOG.md. Prefer packages that
+      already ship in the evaluation runtime (sdk-minimal); do not invent imports for
+      removed demo spine packages that are not in the runtime.
+
+# Host-side bash for editing the candidate profile (workspace-write sandbox).
+- id: persistent-bash
+  config:
+    timeoutMs: 300000
+    description: |-
+      Run commands in a persistent bash shell in the candidate profile directory.
+      Use this to inspect and edit profile.cordis.yml, plugins/, and skills/.
+      Prefer small, focused edits; verify YAML/JS syntax before finishing.
