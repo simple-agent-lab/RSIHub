@@ -76,7 +76,7 @@ def main() -> int:
             "DSH_MUTATE_CORDIS": env.get("DSH_MUTATE_CORDIS", str(runners / "compositions" / "mutate.cordis.yml")),
             "DSH_MODEL": env.get("DSH_META_MODEL", "deepseek-v4-pro"),
             "DSH_MUTATE_SKILLS_DIR": skills_dir,
-            "DSH_SESSION_ROOT": str(run_dir / "mutate-sessions"),
+            "DSH_SESSION_ROOT": str(run_dir / "mutate-dsh-home"),
             "DSH_FINAL_RESPONSE": str(run_dir / "mutate_final_response.txt"),
         }
     )

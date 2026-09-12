@@ -205,7 +205,9 @@ done
                 "DSH_MODEL": model,
                 "DSH_TASK_FILE": str(task_file),
                 "DSH_HOST_WORKSPACE": str(workspace),
-                "DSH_SESSION_ROOT": str(logs / "sessions"),
+                # Isolated per-trial harness home (SDK dsh_home). Session JSONL
+                # is written under <dsh-home>/sessions/ by profile sdk-minimal.
+                "DSH_SESSION_ROOT": str(logs / "dsh-home"),
                 "DSH_SESSION_ID": (self.session_id or "task").replace("/", "_"),
                 "DSH_FINAL_RESPONSE": str(logs / "final_response.txt"),
             }
@@ -257,6 +259,6 @@ done
                 self.logger.warning("dsh_trajectory converter unavailable; skipping")
                 return
         try:
-            convert_session(logs / "sessions", logs / "trajectory.json")
+            convert_session(logs / "dsh-home", logs / "trajectory.json")
         except Exception as error:
             self.logger.warning("trajectory conversion failed: %r", error)

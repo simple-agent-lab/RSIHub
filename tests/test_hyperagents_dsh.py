@@ -245,3 +245,142 @@ def test_dsh_agent_nonzero_driver_exit_raises_after_trajectory(tmp_path: Path, m
         asyncio.run(agent.run("do the task", SimpleNamespace(), SimpleNamespace()))
 
     assert written == [agent.logs_dir]
+
+
+def _stub_deepseek_harness(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Install a tiny deepseek_harness stub so drivers import without the real SDK."""
+    monkeypatch.setitem(sys.modules, "deepseek_harness", SimpleNamespace(DeepSeekHarness=object))
+
+
+def test_drivers_reject_legacy_session_root_and_cordis_kwargs() -> None:
+    """Regression lock: current SDK has no session_root / cordis constructor kwargs."""
+    for relative in (
+        "seeds/dsh/runners/rollout_driver.py",
+        "seeds/dsh/runners/mutate_driver.py",
+    ):
+        source = (ROOT / relative).read_text()
+        assert "session_root=" not in source, relative
+        assert "cordis=" not in source, relative
+        assert "dsh_home=" in source, relative
+        assert "patches=" in source, relative
+
+
+def test_rollout_driver_passes_dsh_home_and_patches(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _stub_deepseek_harness(monkeypatch)
+    module = _load_module("rollout_driver_under_test", ROOT / "seeds" / "dsh" / "runners" / "rollout_driver.py")
+    candidate = tmp_path / "candidate"
+    candidate.mkdir()
+    (candidate / "profile.cordis.yml").write_text("id: seed\n")
+    patch = tmp_path / "rollout.base.cordis.yml"
+    patch.write_text("path: __CANDIDATE_PROFILE__\n")
+    dsh_home = tmp_path / "dsh-home"
+    task = tmp_path / "task.txt"
+    task.write_text("solve it\n")
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    captured: dict[str, object] = {}
+
+    class FakeHarness:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+        def run(self, instruction, session_id=None):
+            captured["instruction"] = instruction
+            captured["session_id"] = session_id
+            return SimpleNamespace(final_response="done")
+
+    monkeypatch.setattr(module, "DeepSeekHarness", FakeHarness)
+    monkeypatch.setattr(
+        module.subprocess,
+        "run",
+        lambda *_a, **_k: SimpleNamespace(stdout="/app\n"),
+    )
+    monkeypatch.setenv("DSH_CONTAINER", "cid")
+    monkeypatch.setenv("DSH_CANDIDATE_DIR", str(candidate))
+    monkeypatch.setenv("DSH_ROLLOUT_CORDIS", str(patch))
+    monkeypatch.setenv("DSH_SESSION_ROOT", str(dsh_home))
+    monkeypatch.setenv("DSH_TASK_FILE", str(task))
+    monkeypatch.setenv("DSH_HOST_WORKSPACE", str(workspace))
+    monkeypatch.setenv("DSH_MODEL", "deepseek-v4-flash")
+    monkeypatch.setenv("DSH_SESSION_ID", "trial1")
+    monkeypatch.setenv("DSH_FINAL_RESPONSE", str(tmp_path / "final.txt"))
+
+    assert module.main() == 0
+    assert captured["dsh_home"] == str(dsh_home)
+    assert captured["profile"] == "sdk-minimal"
+    assert "session_root" not in captured
+    assert "cordis" not in captured
+    patches = captured["patches"]
+    assert isinstance(patches, tuple) and len(patches) == 1
+    effective = Path(str(patches[0]))
+    assert effective.is_file()
+    assert str(candidate / "profile.cordis.yml") in effective.read_text()
+    assert (tmp_path / "final.txt").read_text() == "done"
+
+
+def test_mutate_driver_passes_dsh_home_and_patches(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _stub_deepseek_harness(monkeypatch)
+    module = _load_module("mutate_driver_under_test", ROOT / "seeds" / "dsh" / "runners" / "mutate_driver.py")
+    dsh_home = tmp_path / "mutate-home"
+    mutate_cwd = tmp_path / "target"
+    mutate_cwd.mkdir()
+    patch = tmp_path / "mutate.cordis.yml"
+    patch.write_text("- id: sandbox-policy\n")
+    task = tmp_path / "prompt.txt"
+    task.write_text("improve yourself\n")
+    captured: dict[str, object] = {}
+
+    class FakeHarness:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+        def run(self, prompt, session_id=None):
+            captured["prompt"] = prompt
+            captured["session_id"] = session_id
+            return SimpleNamespace(final_response="mutated")
+
+    monkeypatch.setattr(module, "DeepSeekHarness", FakeHarness)
+    monkeypatch.setenv("DSH_TASK_FILE", str(task))
+    monkeypatch.setenv("DSH_SESSION_ROOT", str(dsh_home))
+    monkeypatch.setenv("DSH_MUTATE_CWD", str(mutate_cwd))
+    monkeypatch.setenv("DSH_MUTATE_CORDIS", str(patch))
+    monkeypatch.setenv("DSH_SESSION_ID", "mutate1")
+    monkeypatch.setenv("DSH_FINAL_RESPONSE", str(tmp_path / "final.txt"))
+
+    assert module.main() == 0
+    assert captured["dsh_home"] == str(dsh_home)
+    assert captured["cwd"] == str(mutate_cwd)
+    assert captured["patches"] == (str(patch),)
+    assert "session_root" not in captured
+    assert "cordis" not in captured
+    assert dsh_home.is_dir()
+    assert (tmp_path / "final.txt").read_text() == "mutated"
+
+
+def test_convert_session_reads_logs_under_dsh_home_sessions(tmp_path: Path) -> None:
+    module = _load_module("dsh_trajectory_under_test", ROOT / "seeds" / "dsh" / "dsh_trajectory.py")
+    home = tmp_path / "dsh-home"
+    sessions = home / "sessions" / "trial1"
+    sessions.mkdir(parents=True)
+    (sessions / "session.jsonl").write_text(
+        '{"type":"user/message","data":{"content":[{"type":"text","text":"hello"}]}}\n'
+        '{"type":"assistant/message","data":{"message":{"content":[{"type":"text","text":"hi"}]}}}\n'
+    )
+    out = tmp_path / "trajectory.json"
+    module.convert_session(home, out)
+    payload = out.read_text()
+    assert "hello" in payload
+    assert "hi" in payload
+    assert '"agent": "dsh"' in payload or '"agent":"dsh"' in payload

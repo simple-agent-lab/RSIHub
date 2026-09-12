@@ -24,9 +24,12 @@ Harness-side (in `surface.exclude`, candidates cannot edit):
 - `dsh_trajectory.py` — the session-log converter.
 - `runners/` — the SDK drivers (`rollout_driver.py`, `mutate_driver.py`), the
   local mutate command (`mutate_local.py`, the dsh self-modification session),
-  and the two frozen cordis compositions (rollout base with the pinned model
-  and execution bridge; mutation session with the self-improvement persona and
-  the cordis prototyping tools).
+  and the two frozen cordis **patches** (rollout overlay with the docker-exec
+  bridge + candidate include; mutation overlay with the self-improvement
+  persona and cordis prototyping tools). Drivers construct `DeepSeekHarness`
+  with `dsh_home` + `profile` + `patches` (not the removed `session_root` /
+  `cordis` kwargs). Per-trial `DSH_SESSION_ROOT` is the isolated harness home;
+  session JSONL lands under `$DSH_SESSION_ROOT/sessions/`.
 
 Model routing follows the workspace's frozen identity: `OPENAI_BASE_URL` /
 `OPENAI_API_KEY` are mapped onto dsh's `DEEPSEEK_BASE_URL` / `DEEPSEEK_API_KEY`.
