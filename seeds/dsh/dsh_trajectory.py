@@ -7,10 +7,25 @@ dsh persists sessions as an event-stream jsonl: each line is
   assistant/message  data.message.content = [{type:"text",text} | {type:"tool-call",id,name,arguments}]
   tool/result        data.message.content = [{type:"tool-result", content:[{type:"text",text}]}]
 
-Skipped: assistant/chunk (streaming fragments; assistant/message already
+Skipped: assistant/chunk streaming text/tool fragments (assistant/message already
 carries the full content), step/turn/session/request markers, inbox splices.
 
-The output schema follows the consumer contract in
+Host-owned usage (parsed only when present — never invented):
+
+  assistant/message  data.usage = {inputTokens, outputTokens, totalTokens?,
+                                   cacheReadTokens?, cacheWriteTokens?, reasoningTokens?}
+  assistant/chunk    data.chunk = {type:"usage", usage: {...}}  (fallback if no
+                                   message-level usage for that turn)
+
+Mapped into trajectory.json as:
+
+  step.usage         per-agent-step metering when the log provides it
+  usage.schema       "dsh-usage-v1"
+  usage.source       "dsh-session-log"
+  usage.totals       session sums over observed fields (null if none observed)
+  usage.per_step     parallel list of per-agent-step usage objects (or null)
+
+The step schema follows the consumer contract in
 ``library/_shared/harbor/evidence.py`` (``_trajectory_details``):
 
   step.source       "user" | "agent" | "tool"
@@ -28,6 +43,21 @@ from typing import Any
 
 SCHEMA_VERSION = "dsh-trajectory-v1"
 _OBS_LIMIT = 8000
+
+_USAGE_FIELD_MAP = (
+    ("inputTokens", "input_tokens"),
+    ("outputTokens", "output_tokens"),
+    ("totalTokens", "total_tokens"),
+    ("cacheReadTokens", "cache_read_tokens"),
+    ("cacheWriteTokens", "cache_write_tokens"),
+    ("reasoningTokens", "reasoning_tokens"),
+    ("input_tokens", "input_tokens"),
+    ("output_tokens", "output_tokens"),
+    ("total_tokens", "total_tokens"),
+    ("cache_read_tokens", "cache_read_tokens"),
+    ("cache_write_tokens", "cache_write_tokens"),
+    ("reasoning_tokens", "reasoning_tokens"),
+)
 
 
 def _read_text_lines(path: Path) -> str:
@@ -75,7 +105,6 @@ def _iter_session_logs(session_root: Path) -> list[Path]:
     found: list[Path] = []
     for pattern in ("*.jsonl", "*.jsonl.zst"):
         found.extend(session_root.rglob(pattern))
-    # Prefer deterministic order; skip directories mistaken for files.
     return sorted({path for path in found if path.is_file()})
 
 
@@ -117,6 +146,58 @@ def _tool_result_text(content: Any) -> str:
     return "\n".join(text for text in texts if text)
 
 
+def _coerce_token_count(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value >= 0 else None
+    if isinstance(value, float) and value.is_integer() and value >= 0:
+        return int(value)
+    return None
+
+
+def _parse_usage(blob: object) -> dict[str, int] | None:
+    """Parse a provider usage object into the host-owned snake_case schema.
+
+    Returns ``None`` when no recognized token fields are present (do not invent).
+    """
+    if not isinstance(blob, dict):
+        return None
+    out: dict[str, int] = {}
+    for src, dest in _USAGE_FIELD_MAP:
+        if src not in blob:
+            continue
+        count = _coerce_token_count(blob.get(src))
+        if count is not None:
+            out[dest] = count
+    return out or None
+
+
+def _usage_from_record(record: dict[str, Any]) -> dict[str, int] | None:
+    kind = record.get("type")
+    data = record.get("data")
+    if not isinstance(data, dict):
+        return None
+    if kind == "assistant/message":
+        parsed = _parse_usage(data.get("usage"))
+        if parsed is not None:
+            return parsed
+        message = data.get("message")
+        if isinstance(message, dict):
+            return _parse_usage(message.get("usage"))
+        return None
+    if kind == "assistant/chunk":
+        chunk = data.get("chunk")
+        if isinstance(chunk, dict) and chunk.get("type") == "usage":
+            return _parse_usage(chunk.get("usage"))
+    return None
+
+
+def _add_usage(totals: dict[str, int], piece: dict[str, int]) -> None:
+    for key, value in piece.items():
+        totals[key] = totals.get(key, 0) + value
+
+
 def _extract(record: dict[str, Any]) -> dict[str, Any] | None:
     kind = record.get("type")
     data = record.get("data")
@@ -139,7 +220,10 @@ def _extract(record: dict[str, Any]) -> dict[str, Any] | None:
         calls = _tool_call_parts(content)
         if calls:
             step["tool_calls"] = calls
-        return step if (text or calls) else None
+        usage = _usage_from_record(record)
+        if usage is not None:
+            step["usage"] = usage
+        return step if (text or calls or usage) else None
 
     if kind == "tool/result":
         message = data.get("message")
@@ -157,19 +241,46 @@ def _extract(record: dict[str, Any]) -> dict[str, Any] | None:
 def convert_session(session_root: Path, out_path: Path) -> None:
     steps: list[dict[str, Any]] = []
     skipped = 0
+    totals: dict[str, int] = {}
+    per_step: list[dict[str, int] | None] = []
+    pending_chunk_usage: dict[str, int] | None = None
     if session_root.is_dir():
         for path in _iter_session_logs(session_root):
             for record in _read_jsonl(path):
+                kind = record.get("type")
+                if kind == "assistant/chunk":
+                    chunk_usage = _usage_from_record(record)
+                    if chunk_usage is not None:
+                        pending_chunk_usage = chunk_usage
+                    skipped += 1
+                    continue
                 step = _extract(record)
                 if step is None:
                     skipped += 1
                     continue
+                if step.get("source") == "agent":
+                    usage = step.get("usage")
+                    if not isinstance(usage, dict) and pending_chunk_usage is not None:
+                        usage = pending_chunk_usage
+                        step["usage"] = usage
+                    pending_chunk_usage = None
+                    if isinstance(usage, dict):
+                        _add_usage(totals, usage)
+                        per_step.append(usage)
+                    else:
+                        per_step.append(None)
                 steps.append(step)
-    payload = {
+    payload: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "agent": "dsh",
         "steps": steps,
         "skipped_records": skipped,
+        "usage": {
+            "schema": "dsh-usage-v1",
+            "source": "dsh-session-log",
+            "totals": totals or None,
+            "per_step": per_step if per_step else None,
+        },
     }
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=1) + "\n")
