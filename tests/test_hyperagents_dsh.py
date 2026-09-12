@@ -216,9 +216,7 @@ def test_dsh_agent_timeout_raises_runtime_error_and_writes_trajectory(
     assert written == [agent.logs_dir]
 
 
-def test_dsh_agent_nonzero_driver_exit_raises_after_trajectory(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_dsh_agent_nonzero_driver_exit_raises_after_trajectory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     module, agent, candidate = _make_dsh_agent(tmp_path, timeout_sec="30")
     written: list[Path] = []
 
