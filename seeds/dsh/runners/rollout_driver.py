@@ -4,7 +4,12 @@ Process-group isolation: on timeout the parent kills the whole group,
 including dsh's Node runtime. All DSH_* variables are placed into this
 process's environment by the parent; the dsh runtime subprocess inherits
 them, which is how ``!!js process.env.*`` expressions in the cordis
-composition resolve.
+patches resolve.
+
+SDK contract (deepseek-harness >= dsh-0.1.5-rc.1): construct DeepSeekHarness
+with ``dsh_home`` + ``profile`` + ``patches`` — never ``session_root`` / ``cordis``.
+``DSH_SESSION_ROOT`` is the per-trial isolated harness home; session JSONL
+lands under ``$DSH_SESSION_ROOT/sessions/``.
 """
 
 from __future__ import annotations
@@ -35,18 +40,18 @@ def main() -> int:
     os.environ.setdefault("DSH_RUNTIME_MODE", "node")
 
     instruction = Path(os.environ["DSH_TASK_FILE"]).read_text()
-    session_root = os.environ["DSH_SESSION_ROOT"]
-    Path(session_root).mkdir(parents=True, exist_ok=True)
+    dsh_home = Path(os.environ["DSH_SESSION_ROOT"])
+    dsh_home.mkdir(parents=True, exist_ok=True)
 
     # `include` plugin paths cannot use !!js (evaluated before !!js), so the
-    # base composition carries a literal __CANDIDATE_PROFILE__ placeholder that
-    # is replaced here with the candidate's absolute profile path. The
-    # candidate's files stay in the candidate directory, so its relative
-    # plugins/skills paths keep working.
+    # base patch carries a literal __CANDIDATE_PROFILE__ placeholder that is
+    # replaced here with the candidate's absolute profile path. The candidate's
+    # files stay in the candidate directory, so its relative plugins/skills
+    # paths keep working.
     candidate_profile = str(Path(os.environ["DSH_CANDIDATE_DIR"]) / "profile.cordis.yml")
     base = Path(os.environ["DSH_ROLLOUT_CORDIS"]).read_text()
     effective = base.replace("__CANDIDATE_PROFILE__", candidate_profile)
-    effective_path = Path(session_root).parent / "rollout.effective.cordis.yml"
+    effective_path = dsh_home.parent / "rollout.effective.cordis.yml"
     effective_path.write_text(effective)
 
     with DeepSeekHarness(
@@ -54,8 +59,9 @@ def main() -> int:
         model=os.environ.get("DSH_MODEL", "deepseek-v4-flash"),
         max_tokens=int(os.environ.get("DSH_MAX_TOKENS", "49152")),
         cwd=os.environ["DSH_HOST_WORKSPACE"],
-        session_root=session_root,
-        cordis=str(effective_path),
+        dsh_home=str(dsh_home),
+        profile=os.environ.get("DSH_PROFILE", "sdk-minimal"),
+        patches=(str(effective_path),),
     ) as harness:
         result = harness.run(instruction, session_id=os.environ.get("DSH_SESSION_ID", "task"))
 

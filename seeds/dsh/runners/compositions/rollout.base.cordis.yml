@@ -1,56 +1,19 @@
-# Frozen rollout base — candidates can never touch this file.
-# The mutable surface is maximal: the candidate owns the entire "model-visible
-# layer" (see seed/profile.cordis.yml). The frozen base provides exactly four
-# seams that stay out of reach:
-#   1. jsonrpc-server — the evaluation channel (how Harbor talks to dsh)
-#   2. llm — the pinned model (fair comparison; candidates may not swap models)
-#   3. execution sandbox = terminal-bash via `docker exec` into the isolated
-#      task container (keeps scoring meaningful)
-#   4. sessions — session persistence (the trajectory evidence source)
-# Everything else (persona / toolset / planning / compaction / subagents /
-# skills / custom plugins / agent behavior) is composed by the candidate,
-# loaded through the include at the end.
+# Frozen Harbor rollout overlay — applied as DeepSeekHarness patches= on top of
+# profile sdk-minimal. Candidates cannot edit this file.
 #
-# Runtime variables (injected by the Harbor adapter through the SDK env):
+# Keeps the four Harbor seams outside the evolvable surface:
+#   1. jsonrpc-server (already in sdk-minimal)
+#   2. pinned model (SDK initialize + llm-deepseek below)
+#   3. bash → docker exec into the task container
+#   4. session persistence under the isolated dsh_home (sdk-minimal default)
+#
+# Runtime variables (injected by DshAgent / rollout_driver):
 #   DSH_CONTAINER / DSH_CONTAINER_CWD / DSH_DOCKER_BIN / DSH_MODEL
-#   DSH_CANDIDATE_DIR (candidate dir; __CANDIDATE_PROFILE__ is replaced by the
-#   driver with its absolute profile path)
+#   __CANDIDATE_PROFILE__ is substituted by the driver with the absolute
+#   candidate profile.cordis.yml path.
 
-- id: sdk-jsonrpc-server
-  name: '@deepseek-ai/dsh-sdk-jsonrpc-server'
-  config:
-    maxTokensAsSuccess: false
-
-# Pinned model: candidate compositions must not add another llm provider
-# (guard-level rejection), so every generation runs on the same "brain".
-- id: llm-deepseek
-  name: '@deepseek-ai/dsh-llm-deepseek'
-  config:
-    apiKeyEnv: DEEPSEEK_API_KEY
-    streamIdleTimeoutMs: 600000
-    models:
-      - id: !!js process.env.DSH_MODEL ?? 'deepseek-v4-flash'
-        contextWindow: !!js Number(process.env.DSH_CONTEXT_WINDOW ?? 1000000)
-
-- id: sandbox
-  name: '@deepseek-ai/dsh-sandbox-local'
-
-- id: sandbox-policy
-  name: '@deepseek-ai/dsh-sandbox-policy'
-  config:
-    mode: danger-full-access
-    workspaceRoot: !!js process.env.DSH_CWD ?? process.cwd()
-
-- id: subprocess
-  name: '@deepseek-ai/dsh-subprocess-local'
-
-- id: pty
-  name: '@deepseek-ai/dsh-terminal'
-
-# Execution bridge (backend 'shell'): the candidate's bash tool consumes it,
-# so commands run inside the task container via `docker exec`.
+# Route shell-backed tools into the Harbor task container.
 - id: terminal-bash
-  name: '@deepseek-ai/dsh-terminal-bash'
   config:
     backendType: shell
     shellPath: !!js process.env.DSH_DOCKER_BIN ?? '/usr/bin/docker'
@@ -79,14 +42,27 @@
     handoffGraceMs: 250
     timeoutMs: 300000
 
-- id: sessions
-  name: '@deepseek-ai/dsh-session-persistence-jsonl'
-  config:
-    root: !!js process.env.DSH_SESSION_ROOT ?? './.sessions'
-    compression: none
+# Host-side persistent bash would escape the container; the candidate profile
+# re-introduces persistent-bash with backendType: shell (uses terminal-bash).
+- id: persistent-bash
+  disabled: true
 
-# ---- Evolvable layer: the candidate's entire model-visible composition ----
-- id: candidate-composition
-  name: '@deepseek-ai/cordis-plugin-include'
+# Candidate agent-spine owns the persona; drop the profile default prompt.
+- id: system-prompt
+  disabled: true
+
+# Prefer the evaluator-pinned model id when the adapter exports DSH_MODEL.
+- id: llm-deepseek
   config:
-    path: __CANDIDATE_PROFILE__
+    apiKeyEnv: DEEPSEEK_API_KEY
+    streamIdleTimeoutMs: 600000
+    models:
+      - id: !!js process.env.DSH_MODEL ?? 'deepseek-v4-flash'
+        contextWindow: !!js Number(process.env.DSH_CONTEXT_WINDOW ?? 1000000)
+
+# ---- Evolvable layer: candidate's entire model-visible composition ----
+- insert:
+    - id: candidate-composition
+      name: '@deepseek-ai/cordis-plugin-include'
+      config:
+        path: __CANDIDATE_PROFILE__

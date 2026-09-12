@@ -22,6 +22,7 @@ The output schema follows the consumer contract in
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -29,9 +30,30 @@ SCHEMA_VERSION = "dsh-trajectory-v1"
 _OBS_LIMIT = 8000
 
 
+def _read_text_lines(path: Path) -> str:
+    """Read a session log, decompressing ``*.jsonl.zst`` when needed."""
+    if path.suffix == ".zst" or path.name.endswith(".jsonl.zst"):
+        try:
+            import zstandard  # type: ignore[import-not-found]
+
+            return zstandard.ZstdDecompressor().decompress(path.read_bytes()).decode("utf-8", errors="replace")
+        except Exception:
+            try:
+                decoded = subprocess.run(
+                    ["zstd", "-d", "-c", str(path)],
+                    capture_output=True,
+                    check=True,
+                    timeout=60,
+                )
+                return decoded.stdout.decode("utf-8", errors="replace")
+            except (FileNotFoundError, subprocess.SubprocessError, OSError):
+                return ""
+    return path.read_text(errors="replace")
+
+
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    for line in path.read_text(errors="replace").splitlines():
+    for line in _read_text_lines(path).splitlines():
         line = line.strip()
         if not line:
             continue
@@ -42,6 +64,19 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
         if isinstance(data, dict):
             rows.append(data)
     return rows
+
+
+def _iter_session_logs(session_root: Path) -> list[Path]:
+    """Collect session event logs under an isolated dsh_home (or legacy root).
+
+    Current SDK layouts store JSONL under ``<dsh_home>/sessions/`` (optionally
+    ``*.jsonl.zst``). Older layouts wrote ``*.jsonl`` directly under the root.
+    """
+    found: list[Path] = []
+    for pattern in ("*.jsonl", "*.jsonl.zst"):
+        found.extend(session_root.rglob(pattern))
+    # Prefer deterministic order; skip directories mistaken for files.
+    return sorted({path for path in found if path.is_file()})
 
 
 def _text_parts(content: Any) -> str:
@@ -123,7 +158,7 @@ def convert_session(session_root: Path, out_path: Path) -> None:
     steps: list[dict[str, Any]] = []
     skipped = 0
     if session_root.is_dir():
-        for path in sorted(session_root.rglob("*.jsonl")):
+        for path in _iter_session_logs(session_root):
             for record in _read_jsonl(path):
                 step = _extract(record)
                 if step is None:

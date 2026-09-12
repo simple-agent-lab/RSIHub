@@ -18,6 +18,12 @@ times, judged by whether ``target/`` actually changed; retries append a
 warning to the prompt asking the agent to summarize rather than dump such
 evidence.
 
+Failure semantics align with RSIHub discard patterns:
+- driver exits 0 with no ``target/`` changes → return 0 so the framework records
+  ``no_proposal`` / ``no changes to commit``
+- driver exits nonzero after exhausted retries with no changes → propagate that
+  nonzero status so the mutate stage fails instead of looking like a clean no-op
+
 This script is harness-side (outside the workspace); candidates cannot reach
 it, and out-of-surface edits are rejected by the surface check regardless.
 
@@ -70,7 +76,7 @@ def main() -> int:
             "DSH_MUTATE_CORDIS": env.get("DSH_MUTATE_CORDIS", str(runners / "compositions" / "mutate.cordis.yml")),
             "DSH_MODEL": env.get("DSH_META_MODEL", "deepseek-v4-pro"),
             "DSH_MUTATE_SKILLS_DIR": skills_dir,
-            "DSH_SESSION_ROOT": str(run_dir / "mutate-sessions"),
+            "DSH_SESSION_ROOT": str(run_dir / "mutate-dsh-home"),
             "DSH_FINAL_RESPONSE": str(run_dir / "mutate_final_response.txt"),
         }
     )
@@ -82,10 +88,27 @@ def main() -> int:
     workspace = os.environ.get("EVOLVE_WORKSPACE", "")
     venv_python = Path(workspace) / ".venv" / "bin" / "python" if workspace else None
     interpreter = str(venv_python) if venv_python and venv_python.is_file() else sys.executable
+    probe = subprocess.run(
+        [interpreter, "-c", "import deepseek_harness"],
+        capture_output=True,
+        text=True,
+    )
+    if probe.returncode != 0:
+        print(
+            "mutate_local: deepseek_harness is not importable in the workspace venv; "
+            "add it from a deepseek-harness clone with `uv add` "
+            "(see recipes/hyperagents_dsh/README.md)",
+            file=sys.stderr,
+        )
+        detail = (probe.stderr or probe.stdout).strip()
+        if detail:
+            print(detail, file=sys.stderr)
+        return 2
     run_dir.mkdir(parents=True, exist_ok=True)
 
     attempts = int(env.get("DSH_META_ATTEMPTS", "3"))
     base_session = env.get("DSH_SESSION_ID", f"mutate-{os.environ.get('EVOLVE_GENID', 'gen')}")
+    last_rc = 0
     for attempt in range(1, attempts + 1):
         env["DSH_SESSION_ID"] = f"{base_session}-a{attempt}"
         if attempt > 1:
@@ -98,6 +121,7 @@ def main() -> int:
             )
             env["DSH_TASK_FILE"] = str(augmented)
         rc = _run_driver(interpreter, driver, env, run_dir, timeout)
+        last_rc = rc
         changed = subprocess.run(
             ["git", "status", "--porcelain", "--", "target/"],
             cwd=checkout,
@@ -107,7 +131,9 @@ def main() -> int:
         if changed:
             return 0
         print(f"mutate_local: attempt {attempt}/{attempts} produced no target/ changes (rc={rc})", file=sys.stderr)
-    return 0  # let the framework record a clean no_proposal
+    # Successful no-op → framework records discard/"no changes to commit".
+    # Exhausted driver failures → nonzero so mutate fails instead of a false no_proposal.
+    return last_rc
 
 
 def _run_driver(interpreter: str, driver: Path, env: dict, run_dir: Path, timeout: float) -> int:
