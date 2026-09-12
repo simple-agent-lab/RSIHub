@@ -13,6 +13,7 @@ resolution uses the harness installation fallback, matching rollout.
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import shutil
 import sys
@@ -21,8 +22,19 @@ from pathlib import Path
 from deepseek_harness import DeepSeekHarness
 
 
+def _ensure_runtime_mode() -> None:
+    """Prefer bundled exe; fail clearly when DSH_RUNTIME_MODE=node has no carrier."""
+    path = Path(__file__).resolve().parent / "runtime_mode.py"
+    spec = importlib.util.spec_from_file_location("dsh_runtime_mode", path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"cannot load runtime mode helper from {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    module.ensure_runtime_mode()
+
+
 def main() -> int:
-    os.environ.setdefault("DSH_RUNTIME_MODE", "node")
+    _ensure_runtime_mode()
 
     prompt = Path(os.environ["DSH_TASK_FILE"]).read_text()
     dsh_home = Path(os.environ["DSH_SESSION_ROOT"])

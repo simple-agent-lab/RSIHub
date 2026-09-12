@@ -3,7 +3,7 @@
   "runtime": {
     "prepare": "evaluator/prepare-runtime.sh",
     "required_environment": {
-      "DSH_NODE_BIN": "executable"
+      "DSH_RUNTIME_MODE": "nonempty"
     },
     "timeout_s": 120
   },

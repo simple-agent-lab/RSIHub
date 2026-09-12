@@ -66,7 +66,38 @@ def test_prepare_runtime_accepts_node_22_19(tmp_path: Path) -> None:
         text=True,
     )
     assert result.returncode == 0, result.stderr
-    assert f"DSH_NODE_BIN={node}" in env_out.read_text()
+    env_text = env_out.read_text()
+    assert f"DSH_NODE_BIN={node}" in env_text
+    assert "DSH_RUNTIME_MODE=node" in env_text
+
+
+def test_prepare_runtime_accepts_exe_mode_without_node(tmp_path: Path) -> None:
+    env_out = tmp_path / "env"
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    result = subprocess.run(
+        ["sh", str(PREPARE), str(run_dir), str(env_out)],
+        env={**os.environ, "DSH_RUNTIME_MODE": "exe", "DSH_NODE_BIN": ""},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "DSH_RUNTIME_MODE=exe" in env_out.read_text()
+    assert "DSH_NODE_BIN=" not in env_out.read_text()
+
+
+def test_prepare_runtime_rejects_unknown_runtime_mode(tmp_path: Path) -> None:
+    env_out = tmp_path / "env"
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    result = subprocess.run(
+        ["sh", str(PREPARE), str(run_dir), str(env_out)],
+        env={**os.environ, "DSH_RUNTIME_MODE": "wasm"},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0
+    assert "unsupported DSH_RUNTIME_MODE" in result.stderr
 
 
 def test_node_check_rejects_unreadable_profile(tmp_path: Path) -> None:
@@ -276,7 +307,9 @@ def test_seed_compositions_avoid_removed_spine_demo_package() -> None:
         assert "dsh-agent-spine-demo" not in text, relative
         assert "agent-spine-demo" not in text, relative
     profile = (ROOT / "seeds/dsh/profile.cordis.yml").read_text()
-    assert "@deepseek-ai/dsh-tool-bash-persistent" in profile or "persistent-bash" in profile
+    assert "@deepseek-ai/dsh-system-prompt" in profile
+    assert "@deepseek-ai/dsh-tool-bash-persistent" in profile
+
     assert "system-prompt" in profile
     rollout = (ROOT / "seeds/dsh/runners/compositions/rollout.base.cordis.yml").read_text()
     assert "cordis-plugin-include" not in rollout
@@ -442,3 +475,85 @@ def test_convert_session_reads_logs_under_dsh_home_sessions(tmp_path: Path) -> N
     assert "hello" in payload
     assert "hi" in payload
     assert '"agent": "dsh"' in payload or '"agent":"dsh"' in payload
+
+
+def test_materialize_candidate_overlay_handles_quote_styles_and_non_plugins(tmp_path: Path) -> None:
+    helper = _load_module(
+        "candidate_overlay_quotes",
+        ROOT / "seeds" / "dsh" / "runners" / "candidate_overlay.py",
+    )
+    candidate = tmp_path / "candidate"
+    (candidate / "plugins").mkdir(parents=True)
+    (candidate / "plugins" / "seed-probe.mjs").write_text("export const name = 'x'\n")
+    (candidate / "profile.cordis.yml").write_text(
+        "- id: system-prompt\n"
+        "  name: '@deepseek-ai/dsh-system-prompt'\n"
+        "  config:\n"
+        "    personaPrefix: hi\n"
+        "- insert:\n"
+        "    - id: plugin-seed-probe\n"
+        '      name: "./plugins/seed-probe.mjs"\n'
+        "    - id: plugin-unquoted\n"
+        "      name: ./plugins/seed-probe.mjs\n"
+    )
+    overlay = helper.materialize_candidate_overlay(candidate, tmp_path / "dsh-home")
+    text = overlay.read_text()
+    absolute = str((candidate / "plugins" / "seed-probe.mjs").resolve())
+    assert absolute in text
+    assert "./plugins/seed-probe.mjs" not in text
+    assert "@deepseek-ai/dsh-system-prompt" in text
+
+
+def test_runtime_mode_prefers_exe_and_errors_clearly_for_missing_node(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    module = _load_module("runtime_mode_under_test", ROOT / "seeds" / "dsh" / "runners" / "runtime_mode.py")
+    monkeypatch.delenv("DSH_RUNTIME_MODE", raising=False)
+    monkeypatch.setattr(module, "_runtime_package_importable", lambda: True)
+    monkeypatch.setattr(module, "_try_resolve", lambda mode: ("/tmp/fake-dsh-exe",) if mode == "exe" else None)
+    assert module.ensure_runtime_mode() == "exe"
+    assert os.environ["DSH_RUNTIME_MODE"] == "exe"
+
+    monkeypatch.setenv("DSH_RUNTIME_MODE", "node")
+    monkeypatch.setattr(module, "_runtime_package_importable", lambda: True)
+    monkeypatch.setattr(module, "_try_resolve", lambda mode: None)
+    with pytest.raises(RuntimeError, match="pnpm exec tsx"):
+        module.ensure_runtime_mode()
+
+
+def test_convert_session_extracts_usage_from_assistant_message(tmp_path: Path) -> None:
+    module = _load_module("dsh_trajectory_usage", ROOT / "seeds" / "dsh" / "dsh_trajectory.py")
+    home = tmp_path / "dsh-home"
+    sessions = home / "sessions" / "trial1"
+    sessions.mkdir(parents=True)
+    (sessions / "session.jsonl").write_text(
+        '{"type":"user/message","data":{"content":[{"type":"text","text":"hello"}]}}\n'
+        '{"type":"assistant/message","data":{"message":{"content":[{"type":"text","text":"hi"}]},'
+        '"usage":{"inputTokens":11,"outputTokens":7,"cacheReadTokens":3}}}\n'
+    )
+    out = tmp_path / "trajectory.json"
+    module.convert_session(home, out)
+    payload = __import__("json").loads(out.read_text())
+    assert payload["usage"]["schema"] == "dsh-usage-v1"
+    assert payload["usage"]["totals"] == {
+        "input_tokens": 11,
+        "output_tokens": 7,
+        "cache_read_tokens": 3,
+    }
+    agent_steps = [s for s in payload["steps"] if s.get("source") == "agent"]
+    assert agent_steps[0]["usage"]["input_tokens"] == 11
+
+
+def test_convert_session_omits_invented_usage_when_logs_lack_metering(tmp_path: Path) -> None:
+    module = _load_module("dsh_trajectory_no_usage", ROOT / "seeds" / "dsh" / "dsh_trajectory.py")
+    home = tmp_path / "dsh-home"
+    sessions = home / "sessions" / "trial1"
+    sessions.mkdir(parents=True)
+    (sessions / "session.jsonl").write_text(
+        '{"type":"user/message","data":{"content":[{"type":"text","text":"hello"}]}}\n'
+        '{"type":"assistant/message","data":{"message":{"content":[{"type":"text","text":"hi"}]}}}\n'
+    )
+    out = tmp_path / "trajectory.json"
+    module.convert_session(home, out)
+    payload = __import__("json").loads(out.read_text())
+    assert payload["usage"]["totals"] is None

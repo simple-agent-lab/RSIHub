@@ -42,6 +42,17 @@ _candidate_overlay = _load_candidate_overlay()
 materialize_candidate_overlay = _candidate_overlay.materialize_candidate_overlay
 
 
+def _ensure_runtime_mode() -> None:
+    """Prefer bundled exe; fail clearly when DSH_RUNTIME_MODE=node has no carrier."""
+    path = Path(__file__).resolve().parent / "runtime_mode.py"
+    spec = importlib.util.spec_from_file_location("dsh_runtime_mode", path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"cannot load runtime mode helper from {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    module.ensure_runtime_mode()
+
+
 def main() -> int:
     container = os.environ["DSH_CONTAINER"]
     inspect = subprocess.run(
@@ -57,7 +68,7 @@ def main() -> int:
     os.environ["DSH_CONTAINER_CWD"] = inspect.stdout.strip() or os.environ.get("DSH_CONTAINER_CWD") or "/"
 
     # The dsh SDK is installed from source; use the dev node runtime carrier.
-    os.environ.setdefault("DSH_RUNTIME_MODE", "node")
+    _ensure_runtime_mode()
 
     instruction = Path(os.environ["DSH_TASK_FILE"]).read_text()
     dsh_home = Path(os.environ["DSH_SESSION_ROOT"])
