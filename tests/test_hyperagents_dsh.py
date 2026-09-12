@@ -265,14 +265,66 @@ def test_drivers_reject_legacy_session_root_and_cordis_kwargs() -> None:
         assert "patches=" in source, relative
 
 
-def test_rollout_driver_passes_dsh_home_and_patches(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_seed_compositions_avoid_removed_spine_demo_package() -> None:
+    """sdk-minimal does not ship dsh-agent-spine-demo; seeds must not name it."""
+    for relative in (
+        "seeds/dsh/profile.cordis.yml",
+        "seeds/dsh/runners/compositions/mutate.cordis.yml",
+        "seeds/dsh/runners/compositions/rollout.base.cordis.yml",
+    ):
+        text = (ROOT / relative).read_text()
+        assert "dsh-agent-spine-demo" not in text, relative
+        assert "agent-spine-demo" not in text, relative
+    profile = (ROOT / "seeds/dsh/profile.cordis.yml").read_text()
+    assert "@deepseek-ai/dsh-tool-bash-persistent" in profile or "persistent-bash" in profile
+    assert "system-prompt" in profile
+    rollout = (ROOT / "seeds/dsh/runners/compositions/rollout.base.cordis.yml").read_text()
+    assert "cordis-plugin-include" not in rollout
+    assert "__CANDIDATE_PROFILE__" not in rollout
+
+
+def test_materialize_candidate_overlay_rewrites_relative_plugins(tmp_path: Path) -> None:
+    helper = _load_module(
+        "candidate_overlay_under_test",
+        ROOT / "seeds" / "dsh" / "runners" / "candidate_overlay.py",
+    )
+    candidate = tmp_path / "candidate"
+    (candidate / "plugins").mkdir(parents=True)
+    (candidate / "plugins" / "seed-probe.mjs").write_text("export const name = 'x'\n")
+    (candidate / "profile.cordis.yml").write_text(
+        "- id: system-prompt\n"
+        "  config:\n"
+        "    personaPrefix: hi\n"
+        "- insert:\n"
+        "    - id: plugin-seed-probe\n"
+        "      name: './plugins/seed-probe.mjs'\n"
+    )
+    dsh_home = tmp_path / "dsh-home"
+    overlay = helper.materialize_candidate_overlay(candidate, dsh_home)
+    assert overlay == dsh_home / "candidate.overlay.cordis.yml"
+    text = overlay.read_text()
+    assert str((candidate / "plugins" / "seed-probe.mjs").resolve()) in text
+    assert "./plugins/seed-probe.mjs" not in text
+
+
+def test_rollout_driver_passes_dsh_home_and_materialized_candidate_patch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     _stub_deepseek_harness(monkeypatch)
     module = _load_module("rollout_driver_under_test", ROOT / "seeds" / "dsh" / "runners" / "rollout_driver.py")
     candidate = tmp_path / "candidate"
-    candidate.mkdir()
-    (candidate / "profile.cordis.yml").write_text("id: seed\n")
-    patch = tmp_path / "rollout.base.cordis.yml"
-    patch.write_text("path: __CANDIDATE_PROFILE__\n")
+    (candidate / "plugins").mkdir(parents=True)
+    (candidate / "plugins" / "seed-probe.mjs").write_text("export const name = 'x'\n")
+    (candidate / "profile.cordis.yml").write_text(
+        "- id: system-prompt\n"
+        "  config:\n"
+        "    personaPrefix: seed\n"
+        "- insert:\n"
+        "    - id: plugin-seed-probe\n"
+        "      name: './plugins/seed-probe.mjs'\n"
+    )
+    harbor = tmp_path / "rollout.base.cordis.yml"
+    harbor.write_text("- id: terminal-bash\n  config: {}\n")
     dsh_home = tmp_path / "dsh-home"
     task = tmp_path / "task.txt"
     task.write_text("solve it\n")
@@ -303,7 +355,7 @@ def test_rollout_driver_passes_dsh_home_and_patches(tmp_path: Path, monkeypatch:
     )
     monkeypatch.setenv("DSH_CONTAINER", "cid")
     monkeypatch.setenv("DSH_CANDIDATE_DIR", str(candidate))
-    monkeypatch.setenv("DSH_ROLLOUT_CORDIS", str(patch))
+    monkeypatch.setenv("DSH_ROLLOUT_CORDIS", str(harbor))
     monkeypatch.setenv("DSH_SESSION_ROOT", str(dsh_home))
     monkeypatch.setenv("DSH_TASK_FILE", str(task))
     monkeypatch.setenv("DSH_HOST_WORKSPACE", str(workspace))
@@ -317,21 +369,23 @@ def test_rollout_driver_passes_dsh_home_and_patches(tmp_path: Path, monkeypatch:
     assert "session_root" not in captured
     assert "cordis" not in captured
     patches = captured["patches"]
-    assert isinstance(patches, tuple) and len(patches) == 1
-    effective = Path(str(patches[0]))
-    assert effective.is_file()
-    assert str(candidate / "profile.cordis.yml") in effective.read_text()
+    assert isinstance(patches, tuple) and len(patches) == 2
+    assert Path(str(patches[0])) == harbor
+    candidate_overlay = Path(str(patches[1]))
+    assert candidate_overlay == dsh_home / "candidate.overlay.cordis.yml"
+    assert candidate_overlay.is_file()
+    assert str((candidate / "plugins" / "seed-probe.mjs").resolve()) in candidate_overlay.read_text()
     assert (tmp_path / "final.txt").read_text() == "done"
 
 
-def test_mutate_driver_passes_dsh_home_and_patches(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_mutate_driver_copies_overlay_under_dsh_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _stub_deepseek_harness(monkeypatch)
     module = _load_module("mutate_driver_under_test", ROOT / "seeds" / "dsh" / "runners" / "mutate_driver.py")
     dsh_home = tmp_path / "mutate-home"
     mutate_cwd = tmp_path / "target"
     mutate_cwd.mkdir()
     patch = tmp_path / "mutate.cordis.yml"
-    patch.write_text("- id: sandbox-policy\n")
+    patch.write_text("- id: system-prompt\n  config:\n    personaPrefix: meta\n")
     task = tmp_path / "prompt.txt"
     task.write_text("improve yourself\n")
     captured: dict[str, object] = {}
@@ -362,10 +416,14 @@ def test_mutate_driver_passes_dsh_home_and_patches(tmp_path: Path, monkeypatch: 
     assert module.main() == 0
     assert captured["dsh_home"] == str(dsh_home)
     assert captured["cwd"] == str(mutate_cwd)
-    assert captured["patches"] == (str(patch),)
+    patches = captured["patches"]
+    assert isinstance(patches, tuple) and len(patches) == 1
+    overlay = Path(str(patches[0]))
+    assert overlay == dsh_home / "mutate.overlay.cordis.yml"
+    assert overlay.is_file()
+    assert "personaPrefix: meta" in overlay.read_text()
     assert "session_root" not in captured
     assert "cordis" not in captured
-    assert dsh_home.is_dir()
     assert (tmp_path / "final.txt").read_text() == "mutated"
 
 

@@ -1,16 +1,18 @@
 # Frozen Harbor rollout overlay — applied as DeepSeekHarness patches= on top of
 # profile sdk-minimal. Candidates cannot edit this file.
 #
-# Keeps the four Harbor seams outside the evolvable surface:
+# Keeps the Harbor seams outside the evolvable surface:
 #   1. jsonrpc-server (already in sdk-minimal)
 #   2. pinned model (SDK initialize + llm-deepseek below)
-#   3. bash → docker exec into the task container
+#   3. bash → docker exec into the task container (terminal-bash)
 #   4. session persistence under the isolated dsh_home (sdk-minimal default)
+#
+# The candidate profile is NOT included from checkout/target/ (that breaks
+# Node package resolution). The rollout driver writes it as a second --patch
+# under dsh_home after rewriting ./plugins/* to absolute paths.
 #
 # Runtime variables (injected by DshAgent / rollout_driver):
 #   DSH_CONTAINER / DSH_CONTAINER_CWD / DSH_DOCKER_BIN / DSH_MODEL
-#   __CANDIDATE_PROFILE__ is substituted by the driver with the absolute
-#   candidate profile.cordis.yml path.
 
 # Route shell-backed tools into the Harbor task container.
 - id: terminal-bash
@@ -42,15 +44,6 @@
     handoffGraceMs: 250
     timeoutMs: 300000
 
-# Host-side persistent bash would escape the container; the candidate profile
-# re-introduces persistent-bash with backendType: shell (uses terminal-bash).
-- id: persistent-bash
-  disabled: true
-
-# Candidate agent-spine owns the persona; drop the profile default prompt.
-- id: system-prompt
-  disabled: true
-
 # Prefer the evaluator-pinned model id when the adapter exports DSH_MODEL.
 - id: llm-deepseek
   config:
@@ -59,10 +52,3 @@
     models:
       - id: !!js process.env.DSH_MODEL ?? 'deepseek-v4-flash'
         contextWindow: !!js Number(process.env.DSH_CONTEXT_WINDOW ?? 1000000)
-
-# ---- Evolvable layer: candidate's entire model-visible composition ----
-- insert:
-    - id: candidate-composition
-      name: '@deepseek-ai/cordis-plugin-include'
-      config:
-        path: __CANDIDATE_PROFILE__
