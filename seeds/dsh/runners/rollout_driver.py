@@ -10,6 +10,10 @@ SDK contract (deepseek-harness >= dsh-0.1.5-rc.1): construct DeepSeekHarness
 with ``dsh_home`` + ``profile`` + ``patches`` — never ``session_root`` / ``cordis``.
 ``DSH_SESSION_ROOT`` is the per-trial isolated harness home; session JSONL
 lands under ``$DSH_SESSION_ROOT/sessions/``.
+
+Candidate composition is materialized under ``dsh_home`` as a second patch
+(not ``cordis-plugin-include`` of ``checkout/target``), so ``@deepseek-ai/*``
+resolves via ``$DSH_HOME/profiles/node_modules``.
 """
 
 from __future__ import annotations
@@ -20,6 +24,11 @@ import sys
 from pathlib import Path
 
 from deepseek_harness import DeepSeekHarness
+
+# Script launch (python rollout_driver.py) does not put this directory on
+# sys.path; keep the helper import working for both module and file execution.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from candidate_overlay import materialize_candidate_overlay  # noqa: E402
 
 
 def main() -> int:
@@ -43,16 +52,9 @@ def main() -> int:
     dsh_home = Path(os.environ["DSH_SESSION_ROOT"])
     dsh_home.mkdir(parents=True, exist_ok=True)
 
-    # `include` plugin paths cannot use !!js (evaluated before !!js), so the
-    # base patch carries a literal __CANDIDATE_PROFILE__ placeholder that is
-    # replaced here with the candidate's absolute profile path. The candidate's
-    # files stay in the candidate directory, so its relative plugins/skills
-    # paths keep working.
-    candidate_profile = str(Path(os.environ["DSH_CANDIDATE_DIR"]) / "profile.cordis.yml")
-    base = Path(os.environ["DSH_ROLLOUT_CORDIS"]).read_text()
-    effective = base.replace("__CANDIDATE_PROFILE__", candidate_profile)
-    effective_path = dsh_home.parent / "rollout.effective.cordis.yml"
-    effective_path.write_text(effective)
+    candidate_dir = Path(os.environ["DSH_CANDIDATE_DIR"])
+    candidate_overlay = materialize_candidate_overlay(candidate_dir, dsh_home)
+    harbor_patch = Path(os.environ["DSH_ROLLOUT_CORDIS"])
 
     with DeepSeekHarness(
         provider="deepseek-official",
@@ -61,7 +63,7 @@ def main() -> int:
         cwd=os.environ["DSH_HOST_WORKSPACE"],
         dsh_home=str(dsh_home),
         profile=os.environ.get("DSH_PROFILE", "sdk-minimal"),
-        patches=(str(effective_path),),
+        patches=(str(harbor_patch), str(candidate_overlay)),
     ) as harness:
         result = harness.run(instruction, session_id=os.environ.get("DSH_SESSION_ID", "task"))
 

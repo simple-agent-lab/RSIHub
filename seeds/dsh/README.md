@@ -7,11 +7,14 @@ excluded from the mutable surface by the recipe.
 
 Evolvable (the genome):
 
-- `profile.cordis.yml` composes the entire model-visible layer: persona,
-  toolset, skills, and evolved-plugin mounts.
+- `profile.cordis.yml` composes the model-visible layer against **sdk-minimal**
+  packages only: `system-prompt` (persona) + `persistent-bash`
+  (`@deepseek-ai/dsh-tool-bash-persistent`, `backendType: shell`) + local
+  `./plugins/*.mjs` mounts. Do not reference removed demo spine packages.
 - `plugins/**` holds candidate-authored dsh plugins (`*.mjs`); `seed-probe.mjs`
   is a no-op wiring proof.
-- `skills/**` contains skill packages; `task-execution` is the baseline.
+- `skills/**` holds skill packages for future evolution notes; gen-0 does not
+  load skill plugins (they are not part of sdk-minimal).
 - `PLAYBOOK.md` / `EVOLUTION_LOG.md` carry lineage methodology and per-generation
   design notes for the mutation agent.
 
@@ -22,14 +25,18 @@ Harness-side (in `surface.exclude`, candidates cannot edit):
   into the task container via `docker exec`, and converts the session log into
   `trajectory.json` for the analyze operators.
 - `dsh_trajectory.py` — the session-log converter.
-- `runners/` — the SDK drivers (`rollout_driver.py`, `mutate_driver.py`), the
-  local mutate command (`mutate_local.py`, the dsh self-modification session),
-  and the two frozen cordis **patches** (rollout overlay with the docker-exec
-  bridge + candidate include; mutation overlay with the self-improvement
-  persona and cordis prototyping tools). Drivers construct `DeepSeekHarness`
-  with `dsh_home` + `profile` + `patches` (not the removed `session_root` /
-  `cordis` kwargs). Per-trial `DSH_SESSION_ROOT` is the isolated harness home;
-  session JSONL lands under `$DSH_SESSION_ROOT/sessions/`.
+- `runners/` — SDK drivers, local mutate, and frozen cordis **patches**:
+  - `rollout.base.cordis.yml` — Harbor seams (docker-exec terminal-bash, pinned
+    model). No foreign `cordis-plugin-include`.
+  - `mutate.cordis.yml` — self-improvement persona on sdk-minimal packages.
+  - `candidate_overlay.py` — materializes `profile.cordis.yml` under the
+    per-trial `dsh_home` with absolute plugin paths so `@deepseek-ai/*` resolves
+    via `$DSH_HOME/profiles/node_modules` (include-from-`checkout/target` would
+    not).
+  Drivers construct `DeepSeekHarness` with `dsh_home` + `profile=sdk-minimal` +
+  `patches=(harbor, candidate_overlay)` (not the removed `session_root` /
+  `cordis` kwargs). `DSH_SESSION_ROOT` is the isolated harness home; session
+  JSONL lands under `$DSH_SESSION_ROOT/sessions/`.
 
 Model routing follows the workspace's frozen identity: `OPENAI_BASE_URL` /
 `OPENAI_API_KEY` are mapped onto dsh's `DEEPSEEK_BASE_URL` / `DEEPSEEK_API_KEY`.
