@@ -102,6 +102,22 @@ def test_preflight_default_recipe_needs_no_external_seed(tmp_path: Path) -> None
     assert "git URL" not in result.stdout
 
 
+def test_preflight_accepts_builtin_dsh_seed_for_hyperagents_dsh(tmp_path: Path) -> None:
+    result = run_evolve(
+        "preflight",
+        str(tmp_path / "ws"),
+        "--recipe",
+        "hyperagents_dsh",
+        "--dataset",
+        str(TASKS_LOCAL),
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "hyperagents_dsh" in result.stdout
+    assert "builtin-dsh" in result.stdout
+    assert "seed directory does not exist" not in result.stdout
+
+
 def test_preflight_blocks_harbor_rollout_without_local_dataset(tmp_path: Path) -> None:
     result = run_evolve("preflight", str(tmp_path / "ws"), "--recipe", "gepa_local")
 
