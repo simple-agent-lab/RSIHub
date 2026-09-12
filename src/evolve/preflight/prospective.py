@@ -18,7 +18,7 @@ from ..config import DEFAULT_RECIPE
 from ..splits import build_manifest
 
 _TEST_ONLY_SEEDS = frozenset({"builtin-dummy"})
-_BUILTIN_SEEDS = frozenset({"builtin-codex", "builtin-local-smoke"})
+_BUILTIN_SEEDS = frozenset({"builtin-codex", "builtin-dsh", "builtin-local-smoke"})
 
 
 @dataclass(frozen=True)
