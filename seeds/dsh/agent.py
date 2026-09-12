@@ -228,6 +228,7 @@ done
             except (ProcessLookupError, PermissionError):
                 pass
 
+        returncode: int | None = None
         try:
             returncode = await asyncio.wait_for(proc.wait(), timeout=timeout)
             self.logger.info("dsh driver exited rc=%s (task %s)", returncode, self.session_id)
