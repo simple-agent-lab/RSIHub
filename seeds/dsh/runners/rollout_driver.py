@@ -18,6 +18,7 @@ resolves via ``$DSH_HOME/profiles/node_modules``.
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import subprocess
 import sys
@@ -25,10 +26,20 @@ from pathlib import Path
 
 from deepseek_harness import DeepSeekHarness
 
-# Script launch (python rollout_driver.py) does not put this directory on
-# sys.path; keep the helper import working for both module and file execution.
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from candidate_overlay import materialize_candidate_overlay  # noqa: E402
+
+def _load_candidate_overlay():
+    """Load the sibling helper without mutating ``sys.path`` (import hygiene)."""
+    path = Path(__file__).resolve().parent / "candidate_overlay.py"
+    spec = importlib.util.spec_from_file_location("dsh_candidate_overlay", path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"cannot load candidate overlay helper from {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_candidate_overlay = _load_candidate_overlay()
+materialize_candidate_overlay = _candidate_overlay.materialize_candidate_overlay
 
 
 def main() -> int:
