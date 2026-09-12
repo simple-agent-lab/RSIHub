@@ -195,6 +195,27 @@ def test_setup_downloads_once_and_builds_codex_image_for_ahe(tmp_path: Path) -> 
     assert "./scripts/run_recipe_demo.sh ahe" in second.stdout
 
 
+def test_setup_prepares_dataset_only_for_hyperagents_dsh(tmp_path: Path) -> None:
+    result, calls = _run(tmp_path, "hyperagents_dsh")
+
+    assert result.returncode == 0, result.stderr
+    assert any(
+        call[:5]
+        == [
+            "uv",
+            "run",
+            "--frozen",
+            "python",
+            "scripts/examples/terminal_bench_smoke/prepare_dataset.py",
+        ]
+        for call in calls
+    )
+    assert not any(call[:2] == ["docker", "build"] for call in calls)
+    assert not any(call[:2] == ["docker", "run"] for call in calls)
+    assert "local mutate" in result.stdout or "Dataset ready" in result.stdout
+    assert "./scripts/run_recipe_demo.sh hyperagents_dsh" in result.stdout
+
+
 def test_setup_builds_codex_image_for_gepa(tmp_path: Path) -> None:
     result, calls = _run(tmp_path, "gepa")
 

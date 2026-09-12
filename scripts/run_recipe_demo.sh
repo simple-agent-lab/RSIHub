@@ -14,7 +14,7 @@ ASSET_ROOT=${EVOLVE_ASSET_DIR:-$ROOT/.evolve-assets/terminal-bench-2.0}
 [[ $ASSET_ROOT == /* ]] || ASSET_ROOT=$CALLER/$ASSET_ROOT
 DATASET=$ASSET_ROOT/terminal-bench-2-30-v1
 [[ $RECIPE == hyperagents_tbench_full || $RECIPE == hyperagents_codex_tbench_full ]] && DATASET=$ASSET_ROOT/raw/terminal-bench
-SUPPORTED=" aevolve ahe ahe_codex gepa hill_climb hill_climb_codex hyperagents hyperagents_codex hyperagents_tbench_full hyperagents_codex_tbench_full "
+SUPPORTED=" aevolve ahe ahe_codex gepa hill_climb hill_climb_codex hyperagents hyperagents_codex hyperagents_dsh hyperagents_tbench_full hyperagents_codex_tbench_full "
 [[ $SUPPORTED == *" $RECIPE "* ]] || { echo "unsupported recipe '$RECIPE'; supported recipes:$SUPPORTED" >&2; exit 2; }
 [[ -d "$ASSET_ROOT/raw/terminal-bench" && ( $RECIPE == *_tbench_full || -f "$DATASET/dataset-source.json" ) ]] || {
   echo "Terminal-Bench assets are missing; run ./scripts/setup_terminal_bench.sh $RECIPE" >&2; exit 2;

@@ -23,7 +23,7 @@ cleanup() {
 trap cleanup EXIT
 
 case "$RECIPE" in
-  aevolve|ahe|hyperagents|ahe_codex|gepa|hill_climb|hill_climb_codex|hyperagents_codex|hyperagents_tbench_full|hyperagents_codex_tbench_full) ;;
+  aevolve|ahe|hyperagents|ahe_codex|gepa|hill_climb|hill_climb_codex|hyperagents_codex|hyperagents_dsh|hyperagents_tbench_full|hyperagents_codex_tbench_full) ;;
   *)
     [[ -f "$RECIPE" || -f "$RECIPE/evolve.yaml" ]] || {
       echo "unsupported recipe; supported recipes are Terminal-Bench profiles or a recipe YAML path" >&2; exit 2;
@@ -59,6 +59,11 @@ case "$RUNTIME_KIND" in
     IMAGE_CONTEXT=$ROOT/containers/mutate
     BUILD_ARGS=(--build-arg "MINISWE_VERSION=$IMAGE_VERSION")
     ;;
+  local)
+    # Dataset-only recipes (hyperagents_dsh): mutate is runner: local on the host.
+    IMAGE_CONTEXT=
+    BUILD_ARGS=()
+    ;;
   *) echo "unsupported recipe runtime" >&2; exit 2 ;;
 esac
 mkdir -p "$ASSET_ROOT"
@@ -72,26 +77,33 @@ if [[ ! -d "$RAW_DATASET/terminal-bench" ]]; then
 fi
 uv run --frozen python scripts/examples/terminal_bench_smoke/prepare_dataset.py "$RAW_DATASET" "$DATASET"
 
-# Resolve once and probe the immutable local image, not its version label.
-IMAGE_ID=$(docker image inspect --format '{{.Id}}' "$IMAGE" 2>/dev/null || true)
-if [[ -z $IMAGE_ID || $REBUILD == --rebuild ]]; then
-  docker build "${BUILD_ARGS[@]}" -t "$IMAGE" "$IMAGE_CONTEXT"
-  IMAGE_ID=$(docker image inspect --format '{{.Id}}' "$IMAGE")
-fi
-[[ $IMAGE_ID =~ ^sha256:[a-f0-9]{64}$ ]] || { echo "cannot resolve a local image ID" >&2; exit 2; }
-PROBE='for tool in git python3 rg; do command -v "$tool" >/dev/null || exit 1; done; '
-if [[ $RUNTIME_KIND == codex ]]; then
-  PROBE+='command -v node >/dev/null; codex --version'
-  EXPECTED="codex-cli $IMAGE_VERSION"
+if [[ $RUNTIME_KIND == local ]]; then
+  if [[ $REBUILD == --rebuild ]]; then
+    echo "local-mutate recipes have no mutate image; --rebuild is a no-op" >&2
+  fi
+  echo "Dataset ready (local mutate — no Codex/MiniSWE mutate image to build)"
 else
-  PROBE+="command -v uv >/dev/null; /root/.local/share/uv/tools/mini-swe-agent/bin/python -c 'import importlib.metadata; print(importlib.metadata.version(\"mini-swe-agent\"))'"
-  EXPECTED=$IMAGE_VERSION
+  # Resolve once and probe the immutable local image, not its version label.
+  IMAGE_ID=$(docker image inspect --format '{{.Id}}' "$IMAGE" 2>/dev/null || true)
+  if [[ -z $IMAGE_ID || $REBUILD == --rebuild ]]; then
+    docker build "${BUILD_ARGS[@]}" -t "$IMAGE" "$IMAGE_CONTEXT"
+    IMAGE_ID=$(docker image inspect --format '{{.Id}}' "$IMAGE")
+  fi
+  [[ $IMAGE_ID =~ ^sha256:[a-f0-9]{64}$ ]] || { echo "cannot resolve a local image ID" >&2; exit 2; }
+  PROBE='for tool in git python3 rg; do command -v "$tool" >/dev/null || exit 1; done; '
+  if [[ $RUNTIME_KIND == codex ]]; then
+    PROBE+='command -v node >/dev/null; codex --version'
+    EXPECTED="codex-cli $IMAGE_VERSION"
+  else
+    PROBE+="command -v uv >/dev/null; /root/.local/share/uv/tools/mini-swe-agent/bin/python -c 'import importlib.metadata; print(importlib.metadata.version(\"mini-swe-agent\"))'"
+    EXPECTED=$IMAGE_VERSION
+  fi
+  OBSERVED=$(docker run --rm --network none --read-only --entrypoint /bin/sh "$IMAGE_ID" -ec "$PROBE") || {
+    echo "image tool validation failed; use --rebuild to replace it" >&2; exit 2;
+  }
+  [[ $OBSERVED == "$EXPECTED" ]] || { echo "image version mismatch; use --rebuild to replace it" >&2; exit 2; }
+  echo "Validated mutation image: $IMAGE ($IMAGE_ID), version $IMAGE_VERSION"
 fi
-OBSERVED=$(docker run --rm --network none --read-only --entrypoint /bin/sh "$IMAGE_ID" -ec "$PROBE") || {
-  echo "image tool validation failed; use --rebuild to replace it" >&2; exit 2;
-}
-[[ $OBSERVED == "$EXPECTED" ]] || { echo "image version mismatch; use --rebuild to replace it" >&2; exit 2; }
-echo "Validated mutation image: $IMAGE ($IMAGE_ID), version $IMAGE_VERSION"
 
 echo "Terminal-Bench 2.0 setup is ready at $READY_DATASET"
 if [[ -e "$RECIPE" ]]; then

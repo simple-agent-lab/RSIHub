@@ -18,7 +18,8 @@ docker info
 ```
 
 Choose a recipe, download and verify the pinned dataset, build that recipe's
-pinned mutate-runner image, and launch one generation:
+pinned mutate-runner image (skipped for `hyperagents_dsh`, which is dataset-only
+because mutate is `runner: local`), and launch one generation:
 
 ```bash
 RECIPE=ahe

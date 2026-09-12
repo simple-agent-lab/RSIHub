@@ -9,6 +9,22 @@ and skills. Validation uses the `node_check` operator (`node --check` on evolved
 plugins plus a tag-tolerant YAML syntax check), so syntactically broken
 candidates are rejected before a full evaluation.
 
+
+## Dataset setup (no mutate image)
+
+`hyperagents_dsh` uses `runner: local` for mutate — there is **no** Codex/MiniSWE
+mutate image to build. Prepare Terminal-Bench dataset assets only:
+
+```bash
+./scripts/setup_terminal_bench.sh hyperagents_dsh
+# then, after the SDK install below:
+EVOLVE_ASSET_DIR=.evolve-assets/terminal-bench-2.0 ./scripts/run_recipe_demo.sh hyperagents_dsh
+```
+
+`setup_terminal_bench.sh` downloads/prepares the pinned 30-task subset and skips
+mutate-image resolve/build for this recipe. Docker is still required for Harbor
+task containers at evaluation time.
+
 ## Runtime setup
 
 The official dsh Python SDK is **not** installed from the unrelated
@@ -28,9 +44,30 @@ git add pyproject.toml uv.lock && git commit -m "workspace runtime: add dsh sdk"
 `mutate_local.py` refuses to start if `deepseek_harness` is not importable in
 the workspace `.venv`.
 
+
+## Runtime carrier (exe vs node)
+
+Editable `uv add` of `sdk-runtime` does **not** by itself produce a launchable
+carrier. From the deepseek-harness checkout, build it:
+
+```bash
+pnpm exec tsx scripts/build-exe-for-python-sdk.ts
+```
+
+That materializes the platform exe and/or `runtime/node/` under `sdk-runtime`.
+
+- **`DSH_RUNTIME_MODE=exe`** (preferred when the bundled exe exists) — no system
+  Node required; `prepare-runtime.sh` accepts this mode without a Node binary.
+- **`DSH_RUNTIME_MODE=node`** — opt-in dev carrier on system Node ≥ 22.19; if
+  the node closure is missing, mutate/rollout drivers fail early with a pointer
+  to the build script above.
+
+When unset, drivers prefer the bundled exe if resolvable; they no longer
+silently default to a broken node carrier.
+
 ## Node and sandbox boundaries
 
-- **Node ≥ 22.19** must be on `PATH` (or `DSH_NODE_BIN`).
+- **Node ≥ 22.19** must be on `PATH` (or `DSH_NODE_BIN`) when using `DSH_RUNTIME_MODE=node` (the default prepare path).
   `evaluator/prepare-runtime.sh` rejects older releases (including Node 22.0–22.18)
   before every evaluation; `evaluator/doctor.json` requires `DSH_NODE_BIN` to be
   an executable so doctor/preflight surfaces a missing runtime early.
