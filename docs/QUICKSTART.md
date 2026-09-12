@@ -29,7 +29,7 @@ RECIPE=ahe
 Supported values are `aevolve`, `ahe`, `ahe_codex`, `gepa`, `hill_climb`,
 `hill_climb_codex`, `hyperagents`, `hyperagents_codex`, and
 `hyperagents_dsh` (see its
-[recipe README](../recipes/hyperagents_dsh/README.md) for the extra dsh SDK
+[recipe README](https://github.com/simple-agent-lab/RSIHub/blob/main/recipes/hyperagents_dsh/README.md) for the extra dsh SDK
 setup it needs). Codex-capable
 profiles may use `CODEX_AUTH_JSON_PATH=/absolute/path/to/auth.json` instead of
 an API key. Use `WORKSPACE`, `TASKS`, `GENERATIONS`, `ENV_FILE`, or
