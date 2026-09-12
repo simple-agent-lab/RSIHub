@@ -228,6 +228,7 @@ done
             except (ProcessLookupError, PermissionError):
                 pass
 
+        returncode: int | None = None
         try:
             returncode = await asyncio.wait_for(proc.wait(), timeout=timeout)
             self.logger.info("dsh driver exited rc=%s (task %s)", returncode, self.session_id)
@@ -235,12 +236,15 @@ done
             self.logger.warning("dsh driver timed out after %ss; killing process group", timeout)
             _kill()
             await proc.wait()
+            raise RuntimeError(f"dsh driver timed out after {timeout}s")
         except asyncio.CancelledError:
             _kill()
             raise
         finally:
             driver_log.close()
             self._write_trajectory(logs)
+        if returncode:
+            raise RuntimeError(f"dsh driver exited {returncode} (task {self.session_id})")
 
     def _write_trajectory(self, logs: Path) -> None:
         """Convert the dsh session log into trajectory.json (best-effort)."""
