@@ -20,6 +20,7 @@
 
 # Self-improvement persona — patches sdk-minimal's system-prompt row.
 - id: system-prompt
+  name: '@deepseek-ai/dsh-system-prompt'
   config:
     includeHarnessIdentity: false
     includeRuntimeContext: false
@@ -36,6 +37,7 @@
 
 # Host-side bash for editing the candidate profile (workspace-write sandbox).
 - id: persistent-bash
+  name: '@deepseek-ai/dsh-tool-bash-persistent'
   config:
     timeoutMs: 300000
     description: |-

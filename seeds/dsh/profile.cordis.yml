@@ -13,6 +13,7 @@
 
 # Persona — patches the sdk-minimal system-prompt row.
 - id: system-prompt
+  name: '@deepseek-ai/dsh-system-prompt'
   config:
     includeHarnessIdentity: false
     includeRuntimeContext: false
@@ -27,6 +28,7 @@
 # terminal-bash docker-exec bridge, so commands land inside the task container.
 # Keep backendType: shell — changing it breaks Harbor isolation.
 - id: persistent-bash
+  name: '@deepseek-ai/dsh-tool-bash-persistent'
   config:
     backendType: shell
     timeoutMs: 300000
