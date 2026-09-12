@@ -38,7 +38,7 @@ class NodeCheckValidate(ValidateOperator):
             # syntax/structure without constructing tags; safe_load would reject
             # legitimate profiles.
             yaml.compose(profile.read_text())
-        except yaml.YAMLError as error:
+        except (OSError, UnicodeError, yaml.YAMLError) as error:
             problems.append(f"profile.cordis.yml: {error}")
 
         node = os.environ.get("DSH_NODE_BIN") or shutil.which("node")

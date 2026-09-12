@@ -13,10 +13,18 @@ fail() { echo "prepare-runtime: $*" >&2; exit 1; }
 NODE_BIN="${DSH_NODE_BIN:-$(command -v node || true)}"
 [ -x "$NODE_BIN" ] || fail "node not found (set DSH_NODE_BIN)"
 NODE_VER="$("$NODE_BIN" --version | sed 's/^v//')"
-case "$NODE_VER" in
-  2[2-9].*|[3-9][0-9].*) : ;;
-  *) fail "node $NODE_VER too old (need >= 22.19)" ;;
+NODE_MAJOR="${NODE_VER%%.*}"
+NODE_REST="${NODE_VER#*.}"
+NODE_MINOR="${NODE_REST%%.*}"
+case "$NODE_MAJOR" in
+  ''|*[!0-9]*) fail "unparseable node version: $NODE_VER" ;;
 esac
+case "$NODE_MINOR" in
+  ''|*[!0-9]*) NODE_MINOR=0 ;;
+esac
+if [ "$NODE_MAJOR" -lt 22 ] || { [ "$NODE_MAJOR" -eq 22 ] && [ "$NODE_MINOR" -lt 19 ]; }; then
+  fail "node $NODE_VER too old (need >= 22.19)"
+fi
 
 # Optional restricted-network assets (uv/uvx binaries + portable python)
 if [ -n "${DSH_ASSETS_DIR:-}" ]; then
