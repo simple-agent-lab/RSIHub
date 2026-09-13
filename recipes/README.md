@@ -14,6 +14,7 @@ represents.
 - [Hill Climb for Codex](hill_climb_codex/README.md)
 - [HyperAgents](hyperagents/README.md)
 - [HyperAgents for Codex](hyperagents_codex/README.md)
+- [HyperAgents for DeepSeek Harness](hyperagents_dsh/README.md)
 - [HyperAgents on full Terminal-Bench 2.0](hyperagents_tbench_full/README.md)
 - [HyperAgents for Codex on full Terminal-Bench 2.0](hyperagents_codex_tbench_full/README.md)
 

@@ -25,13 +25,20 @@ def resolve(recipe: str) -> tuple[str, str, str]:
     if not selected.is_file():
         raise ValueError("recipe file not found")
     config = yaml.safe_load(selected.read_text())["operators"]["mutate"]["config"]
+    # Local mutate (hyperagents_dsh): dataset-only setup — no mutate image.
+    # runner: local with no agent/image is an intentional, documented path.
+    if config.get("runner") == "local" and not config.get("agent") and not config.get("image"):
+        return "local", "-", "-"
     agent = config.get("agent")
     if agent == "codex":
         kind, version = "codex", config.get("agent_kwargs", {}).get("version", pins["CODEX_MUTATE_VERSION"])
     elif agent == "evolve.integrations.harbor.miniswe_task_file:InstalledMiniSweAgent":
         kind, version = "miniswe", pins["MINISWE_VERSION"]
     else:
-        raise ValueError("setup supports Codex and installed MiniSWE mutation images only")
+        raise ValueError(
+            "setup supports Codex and installed MiniSWE mutation images, "
+            "or local mutate (runner: local without agent/image) for dataset-only prep"
+        )
     image = config.get("image")
     if not isinstance(version, str) or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
         raise ValueError("operators.mutate.config.agent_kwargs.version must be an exact version string")

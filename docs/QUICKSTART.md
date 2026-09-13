@@ -18,7 +18,8 @@ docker info
 ```
 
 Choose a recipe, download and verify the pinned dataset, build that recipe's
-pinned mutate-runner image, and launch one generation:
+pinned mutate-runner image (skipped for `hyperagents_dsh`, which is dataset-only
+because mutate is `runner: local`), and launch one generation:
 
 ```bash
 RECIPE=ahe
@@ -27,7 +28,12 @@ RECIPE=ahe
 ```
 
 Supported values are `aevolve`, `ahe`, `ahe_codex`, `gepa`, `hill_climb`,
-`hill_climb_codex`, `hyperagents`, and `hyperagents_codex`. Codex-capable
+`hill_climb_codex`, `hyperagents`, `hyperagents_codex`, and
+`hyperagents_dsh` (see its
+[recipe README](https://github.com/simple-agent-lab/RSIHub/blob/main/recipes/hyperagents_dsh/README.md)
+for the extra dsh SDK setup and the pre-experiment checklist: model pin / `gen/0`
+retag, expected_trials vs `tasks_per_round`, non-TTY docker-exec doctor probe,
+and Harbor vs `DSH_TASK_TIMEOUT_SEC`). Codex-capable
 profiles may use `CODEX_AUTH_JSON_PATH=/absolute/path/to/auth.json` instead of
 an API key. Use `WORKSPACE`, `TASKS`, `GENERATIONS`, `ENV_FILE`, or
 `EVOLVE_ASSET_DIR` to override launcher defaults. See the

@@ -1,0 +1,18 @@
+{
+  "backend": "docker",
+  "runtime": {
+    "prepare": "evaluator/prepare-runtime.sh",
+    "required_environment": {
+      "DSH_RUNTIME_MODE": "nonempty"
+    },
+    "timeout_s": 120
+  },
+  "schema_version": 1,
+  "smoke": {
+    "command": [
+      "sh",
+      "evaluator/doctor_pty_probe.sh"
+    ],
+    "timeout_s": 120
+  }
+}

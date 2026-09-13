@@ -20,7 +20,7 @@ library/
 ├─ analyze/     failure_patterns · trace_browser · trajectory_only · …
 ├─ mutate/      aevolve · ahe · gepa · hyperagents
 │  └─ _support/ shared evidence loading
-├─ validate/    hyperagents · minibatch_improvement
+├─ validate/    hyperagents · minibatch_improvement · node_check
 ├─ novelty/     accept_all · diff_similarity
 ├─ gate/        hillclimb · parent_eligible · ahe_artifact_valid
 ├─ record/      gepa · hyperagents · jsonl

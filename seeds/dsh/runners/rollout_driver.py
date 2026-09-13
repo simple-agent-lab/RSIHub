@@ -1,0 +1,101 @@
+"""Run one dsh session for one Harbor task (spawned as a subprocess by DshAgent).
+
+Process-group isolation: on timeout the parent kills the whole group,
+including dsh's Node runtime. All DSH_* variables are placed into this
+process's environment by the parent; the dsh runtime subprocess inherits
+them, which is how ``!!js process.env.*`` expressions in the cordis
+patches resolve.
+
+SDK contract (deepseek-harness >= dsh-0.1.5-rc.1): construct DeepSeekHarness
+with ``dsh_home`` + ``profile`` + ``patches`` — never ``session_root`` / ``cordis``.
+``DSH_SESSION_ROOT`` is the per-trial isolated harness home; session JSONL
+lands under ``$DSH_SESSION_ROOT/sessions/``.
+
+Candidate composition is materialized under ``dsh_home`` as a second patch
+(not ``cordis-plugin-include`` of ``checkout/target``), so ``@deepseek-ai/*``
+resolves via ``$DSH_HOME/profiles/node_modules``.
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+from deepseek_harness import DeepSeekHarness
+
+
+def _load_sibling(module_name: str, filename: str):
+    """Load a sibling helper without mutating ``sys.path`` (import hygiene)."""
+    path = Path(__file__).resolve().parent / filename
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"cannot load {filename} helper from {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_candidate_overlay = _load_sibling("dsh_candidate_overlay", "candidate_overlay.py")
+materialize_candidate_overlay = _candidate_overlay.materialize_candidate_overlay
+resolve_docker_bin = _load_sibling("dsh_docker_bin", "docker_bin.py").resolve_docker_bin
+
+
+def _ensure_runtime_mode() -> None:
+    """Delegate to runtime_mode.ensure_runtime_mode (exe prefer when unset; prepare pins node for Harbor)."""
+    module = _load_sibling("dsh_runtime_mode", "runtime_mode.py")
+    module.ensure_runtime_mode()
+
+
+def main() -> int:
+    # Same docker resolve as agent (README canonical policy); inject for cordis.
+    docker_bin = resolve_docker_bin()
+    os.environ["DSH_DOCKER_BIN"] = docker_bin
+
+    container = os.environ["DSH_CONTAINER"]
+    inspect = subprocess.run(
+        [docker_bin, "inspect", "-f", "{{.Config.WorkingDir}}", container],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    # Container working directory: prefer the image's declared WorkingDir, then
+    # a caller-provided default, finally "/" (always exists). Falling back to a
+    # missing directory would make `docker exec -w` fail and the shell exit
+    # immediately.
+    os.environ["DSH_CONTAINER_CWD"] = inspect.stdout.strip() or os.environ.get("DSH_CONTAINER_CWD") or "/"
+
+    # The dsh SDK is installed from source; use the dev node runtime carrier.
+    _ensure_runtime_mode()
+
+    instruction = Path(os.environ["DSH_TASK_FILE"]).read_text()
+    dsh_home = Path(os.environ["DSH_SESSION_ROOT"])
+    dsh_home.mkdir(parents=True, exist_ok=True)
+
+    candidate_dir = Path(os.environ["DSH_CANDIDATE_DIR"])
+    candidate_overlay = materialize_candidate_overlay(candidate_dir, dsh_home)
+    harbor_patch = Path(os.environ["DSH_ROLLOUT_CORDIS"])
+
+    with DeepSeekHarness(
+        provider="deepseek-official",
+        model=os.environ.get("DSH_MODEL", "deepseek-v4-flash"),
+        max_tokens=int(os.environ.get("DSH_MAX_TOKENS", "49152")),
+        cwd=os.environ["DSH_HOST_WORKSPACE"],
+        dsh_home=str(dsh_home),
+        profile=os.environ.get("DSH_PROFILE", "sdk-minimal"),
+        patches=(str(harbor_patch), str(candidate_overlay)),
+    ) as harness:
+        result = harness.run(instruction, session_id=os.environ.get("DSH_SESSION_ID", "task"))
+
+    final = getattr(result, "final_response", None) or ""
+    out = os.environ.get("DSH_FINAL_RESPONSE")
+    if out:
+        Path(out).write_text(final)
+    print(final[-2000:])
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

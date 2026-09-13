@@ -1,0 +1,41 @@
+experiment:
+  id: hyperagents_dsh
+  max_generations: 10
+  target_score: null
+  children_per_gen: 1
+  mode: driver
+  seed: 0
+target:
+  seed: builtin-dsh
+surface:
+  include:
+    - target/**
+  exclude:
+    - target/agent.py
+    - target/dsh_trajectory.py
+    - target/runners/**
+operators:
+  select: {operator: score_child_prop, config: {seed: 0}}
+  rollout: {operator: parent_evaluation, timeout_s: 600, config: {field_limit: 2000}}
+  analyze: {operator: trace_browser, timeout_s: 600, config: {max_chars: 30000}}
+  mutate: {operator: hyperagents, timeout_s: 7200, config: {runner: local, command: "python3 target/runners/mutate_local.py", editable_roots: [target], expose_gate_data: false, max_retries: 1}}
+  validate: {operator: node_check, timeout_s: 300, config: {}}
+  gate: {operator: parent_eligible, config: {}}
+  record: {operator: hyperagents, config: {}}
+  timeout_s: 600
+evaluator:
+  engine: harbor
+  model: openai/gpt-5.4-2026-03-05
+  dataset: terminal-bench-2-30-v1
+  agent: target.agent:DshAgent
+  task_scope: full
+  evaluation_split: train
+  sampling: static
+  tasks_per_round: 30
+  repetitions: 1
+  n_concurrent: 10
+  max_retries: 1
+  benchmark_timeout_is_zero: true
+  partial_floor: 0.8
+  agent_env:
+    DSH_TASK_TIMEOUT_SEC: "1800"
