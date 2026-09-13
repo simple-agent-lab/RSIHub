@@ -13,6 +13,11 @@
 #
 # Runtime variables (injected by DshAgent / rollout_driver):
 #   DSH_CONTAINER / DSH_CONTAINER_CWD / DSH_DOCKER_BIN / DSH_MODEL
+#
+# DSH_DOCKER_BIN is required: DshAgent and rollout_driver resolve it via
+# DSH_DOCKER_BIN (if executable) or PATH (shutil.which / command -v). Do not
+# fall back to /usr/bin/docker — that path is often missing on Homebrew Mac
+# (/opt/homebrew/bin/docker) and surfaces as "PTY shell exited during startup".
 
 # Route shell-backed tools into the Harbor task container.
 # Never pass `docker exec -t`: headless Harbor hosts have no TTY, and allocating
@@ -26,7 +31,7 @@
 - id: terminal-bash
   config:
     backendType: shell
-    shellPath: !!js process.env.DSH_DOCKER_BIN ?? '/usr/bin/docker'
+    shellPath: !!js process.env.DSH_DOCKER_BIN
     shellArgs:
       - exec
       - -i

@@ -23,16 +23,22 @@ Harness-side (in `surface.exclude`, candidates cannot edit):
 - `agent.py` — the Harbor candidate adapter. It runs host-side, spawns a dsh
   session per trial through the dsh Python SDK, bridges the session's bash tool
   into the task container via `docker exec`, and converts the session log into
-  `trajectory.json` for the analyze operators.
+  `trajectory.json` for the analyze operators. It resolves the host `docker`
+  CLI via `DSH_DOCKER_BIN` (if set and executable) or `PATH` (`shutil.which`)
+  and injects `DSH_DOCKER_BIN` into the rollout driver — never assume
+  `/usr/bin/docker` (Homebrew Mac typically uses `/opt/homebrew/bin/docker`).
 - `dsh_trajectory.py` — the session-log converter.
 - `runners/` — SDK drivers, local mutate, and frozen cordis **patches**:
   - `rollout.base.cordis.yml` — Harbor seams (docker-exec terminal-bash, pinned
-    model). No foreign `cordis-plugin-include`.
+    model). No foreign `cordis-plugin-include`. `shellPath` reads
+    `DSH_DOCKER_BIN` only (agent/driver must set it; no `/usr/bin/docker`
+    default).
   - `mutate.cordis.yml` — self-improvement persona on sdk-minimal packages.
   - `candidate_overlay.py` — materializes `profile.cordis.yml` under the
     per-trial `dsh_home` with absolute plugin paths so `@deepseek-ai/*` resolves
     via `$DSH_HOME/profiles/node_modules` (include-from-`checkout/target` would
     not).
+  - `docker_bin.py` — shared docker CLI resolution for agent and rollout_driver.
   Drivers construct `DeepSeekHarness` with `dsh_home` + `profile=sdk-minimal` +
   `patches=(harbor, candidate_overlay)` (not the removed `session_root` /
   `cordis` kwargs). `DSH_SESSION_ROOT` is the isolated harness home; session

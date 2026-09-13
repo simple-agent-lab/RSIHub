@@ -179,7 +179,15 @@ def test_mutate_local_propagates_driver_failure_when_target_unchanged(tmp_path: 
     assert "no target/ changes" in result.stderr
 
 
-def _make_dsh_agent(tmp_path: Path, *, timeout_sec: str = "0.05"):
+def _fake_docker(bin_dir: Path) -> Path:
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    docker = bin_dir / "docker"
+    docker.write_text("#!/bin/sh\nexit 0\n")
+    docker.chmod(docker.stat().st_mode | stat.S_IXUSR)
+    return docker
+
+
+def _make_dsh_agent(tmp_path: Path, *, timeout_sec: str = "0.05", docker_bin: Path | None = None):
     module = _load_module("dsh_agent_under_test", DSH_AGENT)
     candidate = tmp_path / "candidate"
     candidate.mkdir()
@@ -188,13 +196,16 @@ def _make_dsh_agent(tmp_path: Path, *, timeout_sec: str = "0.05"):
     (runners / "compositions").mkdir(parents=True)
     (runners / "compositions" / "rollout.base.cordis.yml").write_text("id: rollout\n")
     (runners / "rollout_driver.py").write_text("raise SystemExit(0)\n")
+    # Agent loads docker_bin.py from the real seed runners/ next to agent.py.
     logs = tmp_path / "logs"
+    docker = docker_bin or _fake_docker(tmp_path / "docker-bin")
     agent = module.DshAgent(
         logs_dir=logs,
         model_name="test/deepseek-v4-flash",
         extra_env={
             "EVOLVE_CANDIDATE_SOURCE": str(candidate),
             "DSH_TASK_TIMEOUT_SEC": timeout_sec,
+            "DSH_DOCKER_BIN": str(docker),
         },
     )
     agent.session_id = "trial/1"
@@ -333,6 +344,78 @@ def test_rollout_cordis_docker_exec_omits_tty_flag() -> None:
     assert "- --norc\n" in rollout
     assert "- --norc\n      - -i\n" not in rollout
     assert "bash -i" in rollout
+    # Agent/driver must inject DSH_DOCKER_BIN — no hard-coded /usr/bin/docker.
+    assert "shellPath: !!js process.env.DSH_DOCKER_BIN" in rollout
+    assert "'/usr/bin/docker'" not in rollout
+    assert '"/usr/bin/docker"' not in rollout
+
+
+def test_resolve_docker_bin_prefers_env_then_which(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    helper = _load_module("dsh_docker_bin_under_test", ROOT / "seeds" / "dsh" / "runners" / "docker_bin.py")
+    explicit = _fake_docker(tmp_path / "explicit")
+    path_docker = _fake_docker(tmp_path / "path-bin")
+    # Explicit DSH_DOCKER_BIN wins over PATH.
+    assert helper.resolve_docker_bin(env={"DSH_DOCKER_BIN": str(explicit), "PATH": str(tmp_path / "path-bin")}) == str(
+        explicit
+    )
+    # PATH via which when unset.
+    found = helper.resolve_docker_bin(env={"PATH": str(tmp_path / "path-bin")})
+    assert found == str(path_docker)
+    # Missing binary fails fast (no /usr/bin/docker assumption).
+    with pytest.raises(RuntimeError, match="not found"):
+        helper.resolve_docker_bin(env={"PATH": str(tmp_path / "empty")})
+    missing = tmp_path / "missing-docker"
+    with pytest.raises(RuntimeError, match="not an executable"):
+        helper.resolve_docker_bin(env={"DSH_DOCKER_BIN": str(missing)})
+    monkeypatch.delenv("DSH_DOCKER_BIN", raising=False)
+
+
+def test_dsh_agent_injects_resolved_dsh_docker_bin(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    docker = _fake_docker(tmp_path / "homebrew-style" / "bin")
+    # Simulate Homebrew: docker is on PATH but not at /usr/bin/docker, and caller
+    # did not set DSH_DOCKER_BIN — agent must which() and inject.
+    module = _load_module("dsh_agent_docker_inject", DSH_AGENT)
+    candidate = tmp_path / "candidate"
+    candidate.mkdir()
+    (candidate / "profile.cordis.yml").write_text("id: seed\n")
+    runners = candidate / "runners"
+    (runners / "compositions").mkdir(parents=True)
+    (runners / "compositions" / "rollout.base.cordis.yml").write_text("id: rollout\n")
+    (runners / "rollout_driver.py").write_text("raise SystemExit(0)\n")
+    agent = module.DshAgent(
+        logs_dir=tmp_path / "logs",
+        model_name="deepseek-v4-flash",
+        extra_env={
+            "EVOLVE_CANDIDATE_SOURCE": str(candidate),
+            "DSH_TASK_TIMEOUT_SEC": "30",
+            "PATH": f"{docker.parent}{os.pathsep}/usr/bin:/bin",
+        },
+    )
+    agent.session_id = "t1"
+    captured_env: dict[str, str] = {}
+
+    class FakeProc:
+        pid = 1
+
+        async def wait(self) -> int:
+            return 0
+
+    async def fake_create(*_args, **kwargs):
+        captured_env.update(kwargs["env"])
+        return FakeProc()
+
+    async def fake_container_id(_environment) -> str:
+        return "cid"
+
+    monkeypatch.setattr(module.asyncio, "create_subprocess_exec", fake_create)
+    monkeypatch.setattr(agent, "_container_id", fake_container_id)
+    monkeypatch.setattr(agent, "_runners_dir", lambda: candidate / "runners")
+    monkeypatch.setattr(agent, "_write_trajectory", lambda _logs: None)
+    # Ensure os.environ does not already supply DSH_DOCKER_BIN for this case.
+    monkeypatch.delenv("DSH_DOCKER_BIN", raising=False)
+
+    asyncio.run(agent.run("do the task", SimpleNamespace(), SimpleNamespace()))
+    assert captured_env["DSH_DOCKER_BIN"] == str(docker)
 
 
 def test_doctor_contract_wires_non_tty_docker_exec_probe() -> None:
@@ -348,6 +431,9 @@ def test_doctor_contract_wires_non_tty_docker_exec_probe() -> None:
     assert "failing closed" in probe
     assert "script" in probe
     assert "echo ok" in probe
+    assert "DSH_DOCKER_BIN" in probe
+    assert "/usr/bin/docker" in probe  # documented as the forbidden assumption
+    assert "using docker at" in probe
 
 
 def test_doctor_pty_probe_uses_non_tty_exec_with_fake_docker(tmp_path: Path) -> None:
@@ -432,6 +518,7 @@ def test_doctor_pty_probe_uses_non_tty_exec_with_fake_docker(tmp_path: Path) -> 
         text=True,
     )
     assert result.returncode == 0, result.stderr
+    assert f"using docker at {docker}" in result.stdout
     assert "non-TTY docker exec ok" in result.stdout
     assert "host-PTY docker exec ok" in result.stdout
     logged = log.read_text()
@@ -442,6 +529,55 @@ def test_doctor_pty_probe_uses_non_tty_exec_with_fake_docker(tmp_path: Path) -> 
     assert "--norc" in logged
     assert "/bin/sh -c" not in logged
     assert logged.count("/bin/bash") >= 2
+
+
+def test_doctor_pty_probe_resolves_docker_from_path(tmp_path: Path) -> None:
+    """Without DSH_DOCKER_BIN, doctor must which() docker — not assume /usr/bin/docker."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    docker = bin_dir / "docker"
+    docker.write_text(
+        textwrap.dedent(
+            """\
+            #!/bin/sh
+            set -eu
+            case "$1" in
+              image) exit 0 ;;
+              run) printf 'fake-cid\\n' ;;
+              exec)
+                cat >/dev/null
+                printf 'ok\\n'
+                ;;
+              rm) exit 0 ;;
+              *) exit 1 ;;
+            esac
+            """
+        )
+    )
+    docker.chmod(docker.stat().st_mode | stat.S_IXUSR)
+    env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}/usr/bin:/bin"}
+    env.pop("DSH_DOCKER_BIN", None)
+    result = subprocess.run(
+        ["sh", str(ROOT / "recipes/hyperagents_dsh/evaluator/doctor_pty_probe.sh")],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert f"using docker at {docker}" in result.stdout
+
+
+def test_doctor_pty_probe_fails_when_dsh_docker_bin_missing(tmp_path: Path) -> None:
+    missing = tmp_path / "no-such-docker"
+    result = subprocess.run(
+        ["sh", str(ROOT / "recipes/hyperagents_dsh/evaluator/doctor_pty_probe.sh")],
+        env={**os.environ, "DSH_DOCKER_BIN": str(missing), "PATH": "/usr/bin:/bin"},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0
+    assert "not found or not executable" in result.stderr
+    assert "/usr/bin/docker" in result.stderr
 
 
 def test_materialize_candidate_overlay_rewrites_relative_plugins(tmp_path: Path) -> None:
@@ -514,6 +650,8 @@ def test_rollout_driver_passes_dsh_home_and_materialized_candidate_patch(
         "run",
         lambda *_a, **_k: SimpleNamespace(stdout="/app\n"),
     )
+    docker = _fake_docker(tmp_path / "docker-bin")
+    monkeypatch.setenv("DSH_DOCKER_BIN", str(docker))
     monkeypatch.setenv("DSH_CONTAINER", "cid")
     monkeypatch.setenv("DSH_CANDIDATE_DIR", str(candidate))
     monkeypatch.setenv("DSH_ROLLOUT_CORDIS", str(harbor))
@@ -525,6 +663,7 @@ def test_rollout_driver_passes_dsh_home_and_materialized_candidate_patch(
     monkeypatch.setenv("DSH_FINAL_RESPONSE", str(tmp_path / "final.txt"))
 
     assert module.main() == 0
+    assert os.environ["DSH_DOCKER_BIN"] == str(docker)
     assert captured["dsh_home"] == str(dsh_home)
     assert captured["profile"] == "sdk-minimal"
     assert "session_root" not in captured
@@ -537,6 +676,58 @@ def test_rollout_driver_passes_dsh_home_and_materialized_candidate_patch(
     assert candidate_overlay.is_file()
     assert str((candidate / "plugins" / "seed-probe.mjs").resolve()) in candidate_overlay.read_text()
     assert (tmp_path / "final.txt").read_text() == "done"
+
+
+def test_rollout_driver_sets_dsh_docker_bin_from_which(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """When DSH_DOCKER_BIN is unset, driver resolves via PATH and exports it for cordis."""
+    _stub_deepseek_harness(monkeypatch)
+    module = _load_module("rollout_driver_which_docker", ROOT / "seeds" / "dsh" / "runners" / "rollout_driver.py")
+    candidate = tmp_path / "candidate"
+    (candidate / "plugins").mkdir(parents=True)
+    (candidate / "profile.cordis.yml").write_text("- id: system-prompt\n  config:\n    personaPrefix: seed\n")
+    harbor = tmp_path / "rollout.base.cordis.yml"
+    harbor.write_text("- id: terminal-bash\n  config: {}\n")
+    dsh_home = tmp_path / "dsh-home"
+    task = tmp_path / "task.txt"
+    task.write_text("solve it\n")
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    docker = _fake_docker(tmp_path / "opt-homebrew" / "bin")
+    inspect_cmd: list[str] = []
+
+    class FakeHarness:
+        def __init__(self, **_kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+        def run(self, _instruction, session_id=None):
+            return SimpleNamespace(final_response="done")
+
+    def fake_run(cmd, **_kwargs):
+        inspect_cmd.extend(cmd)
+        return SimpleNamespace(stdout="/app\n")
+
+    monkeypatch.setattr(module, "DeepSeekHarness", FakeHarness)
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+    monkeypatch.delenv("DSH_DOCKER_BIN", raising=False)
+    monkeypatch.setenv("PATH", f"{docker.parent}{os.pathsep}/usr/bin:/bin")
+    monkeypatch.setenv("DSH_CONTAINER", "cid")
+    monkeypatch.setenv("DSH_CANDIDATE_DIR", str(candidate))
+    monkeypatch.setenv("DSH_ROLLOUT_CORDIS", str(harbor))
+    monkeypatch.setenv("DSH_SESSION_ROOT", str(dsh_home))
+    monkeypatch.setenv("DSH_TASK_FILE", str(task))
+    monkeypatch.setenv("DSH_HOST_WORKSPACE", str(workspace))
+    monkeypatch.setenv("DSH_SESSION_ID", "trial1")
+
+    assert module.main() == 0
+    assert os.environ["DSH_DOCKER_BIN"] == str(docker)
+    assert inspect_cmd[0] == str(docker)
+    assert inspect_cmd[1] == "inspect"
 
 
 def test_mutate_driver_copies_overlay_under_dsh_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

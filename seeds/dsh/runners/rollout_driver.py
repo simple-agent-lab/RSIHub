@@ -27,36 +27,38 @@ from pathlib import Path
 from deepseek_harness import DeepSeekHarness
 
 
-def _load_candidate_overlay():
-    """Load the sibling helper without mutating ``sys.path`` (import hygiene)."""
-    path = Path(__file__).resolve().parent / "candidate_overlay.py"
-    spec = importlib.util.spec_from_file_location("dsh_candidate_overlay", path)
+def _load_sibling(module_name: str, filename: str):
+    """Load a sibling helper without mutating ``sys.path`` (import hygiene)."""
+    path = Path(__file__).resolve().parent / filename
+    spec = importlib.util.spec_from_file_location(module_name, path)
     if spec is None or spec.loader is None:
-        raise ImportError(f"cannot load candidate overlay helper from {path}")
+        raise ImportError(f"cannot load {filename} helper from {path}")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
 
-_candidate_overlay = _load_candidate_overlay()
+_candidate_overlay = _load_sibling("dsh_candidate_overlay", "candidate_overlay.py")
 materialize_candidate_overlay = _candidate_overlay.materialize_candidate_overlay
+resolve_docker_bin = _load_sibling("dsh_docker_bin", "docker_bin.py").resolve_docker_bin
 
 
 def _ensure_runtime_mode() -> None:
     """Prefer bundled exe; fail clearly when DSH_RUNTIME_MODE=node has no carrier."""
-    path = Path(__file__).resolve().parent / "runtime_mode.py"
-    spec = importlib.util.spec_from_file_location("dsh_runtime_mode", path)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"cannot load runtime mode helper from {path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    module = _load_sibling("dsh_runtime_mode", "runtime_mode.py")
     module.ensure_runtime_mode()
 
 
 def main() -> int:
+    # Ensure cordis shellPath and local inspect use the same resolved binary.
+    # Prefer DSH_DOCKER_BIN when set; otherwise PATH via shutil.which — never
+    # hard-code /usr/bin/docker (absent on Homebrew Mac).
+    docker_bin = resolve_docker_bin()
+    os.environ["DSH_DOCKER_BIN"] = docker_bin
+
     container = os.environ["DSH_CONTAINER"]
     inspect = subprocess.run(
-        ["docker", "inspect", "-f", "{{.Config.WorkingDir}}", container],
+        [docker_bin, "inspect", "-f", "{{.Config.WorkingDir}}", container],
         capture_output=True,
         text=True,
         timeout=30,

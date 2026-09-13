@@ -13,11 +13,19 @@
 # Cheap and read-only aside from a short-lived throwaway container — no Harbor trial.
 set -eu
 
-DOCKER_BIN="${DSH_DOCKER_BIN:-$(command -v docker || true)}"
+# Same resolution as DshAgent / rollout_driver: honor DSH_DOCKER_BIN when set,
+# else PATH. Never fall back to a hard-coded /usr/bin/docker (Homebrew Mac).
+if [ -n "${DSH_DOCKER_BIN:-}" ]; then
+  DOCKER_BIN=$DSH_DOCKER_BIN
+else
+  DOCKER_BIN=$(command -v docker || true)
+fi
 [ -n "$DOCKER_BIN" ] && [ -x "$DOCKER_BIN" ] || {
-  echo "doctor_pty_probe: docker not found (set DSH_DOCKER_BIN)" >&2
+  echo "doctor_pty_probe: docker not found or not executable (set DSH_DOCKER_BIN or install docker on PATH)" >&2
+  echo "doctor_pty_probe: do not assume /usr/bin/docker — Homebrew Mac typically uses /opt/homebrew/bin/docker" >&2
   exit 1
 }
+printf 'doctor_pty_probe: using docker at %s\n' "$DOCKER_BIN"
 
 cid=
 cleanup() {

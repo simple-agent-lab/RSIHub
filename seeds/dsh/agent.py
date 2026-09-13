@@ -30,6 +30,10 @@ Optional restricted-network compensations (all no-ops when unset):
   DSH_CONTAINER_PIP_INDEX    pip index URL written to /etc/pip.conf
   DSH_CONTAINER_PROXY        http(s) proxy exported inside the container
   DSH_CONTAINER_NO_PROXY     no_proxy list (default: localhost,127.0.0.1)
+  DSH_DOCKER_BIN             absolute path to the host ``docker`` CLI (optional;
+                             otherwise resolved via ``PATH``). Never assume
+                             ``/usr/bin/docker`` — Homebrew Mac installs under
+                             ``/opt/homebrew/bin``.
 
 This file ships in the seed but sits in ``surface.exclude``: a candidate that
 edits it is rejected as ``invalid_proposal``.
@@ -38,12 +42,28 @@ edits it is rejected as ``invalid_proposal``.
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import os
 import signal
 import sys
 from pathlib import Path
 
 from harbor.agents.base import BaseAgent
+
+
+def _load_docker_bin_helper():
+    """Load runners/docker_bin.py without mutating ``sys.path``."""
+    path = Path(__file__).resolve().parent / "runners" / "docker_bin.py"
+    spec = importlib.util.spec_from_file_location("dsh_docker_bin", path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"cannot load docker bin helper from {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_docker_bin = _load_docker_bin_helper()
+resolve_docker_bin = _docker_bin.resolve_docker_bin
 
 
 class DshAgent(BaseAgent):
@@ -197,6 +217,9 @@ done
         api_key = self._env("OPENAI_API_KEY")
         if api_key:
             env["DEEPSEEK_API_KEY"] = api_key
+        # Cordis terminal-bash reads DSH_DOCKER_BIN as shellPath. Resolve via
+        # env/PATH (never assume /usr/bin/docker — missing on Homebrew Mac).
+        docker_bin = resolve_docker_bin(env=env)
         env.update(
             {
                 "DSH_CONTAINER": container,
@@ -205,6 +228,7 @@ done
                 "DSH_MODEL": model,
                 "DSH_TASK_FILE": str(task_file),
                 "DSH_HOST_WORKSPACE": str(workspace),
+                "DSH_DOCKER_BIN": docker_bin,
                 # Isolated per-trial harness home (SDK dsh_home). Session JSONL
                 # is written under <dsh-home>/sessions/ by profile sdk-minimal.
                 "DSH_SESSION_ROOT": str(logs / "dsh-home"),

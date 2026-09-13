@@ -78,6 +78,10 @@ silently default to a broken node carrier.
   container with `/bin/bash --noprofile --norc` (never interactive `bash -i`).
   Headless Harbor/node-pty does not allocate a container TTY; either `-t` or
   `bash -i` aborts the bash backend with `PTY shell exited during startup`.
+  The host `docker` CLI is resolved via `DSH_DOCKER_BIN` or `PATH` — do **not**
+  assume `/usr/bin/docker` (Homebrew Mac: `/opt/homebrew/bin/docker`). Doctor
+  and the agent must agree on that resolution so PATH-only installs are not a
+  false green against a missing hard-coded fallback.
   Candidate plugins still load in the
   host-side dsh process for rollouts; treat that host process as trusted
   evaluation infrastructure (further plugin isolation is a follow-up).
