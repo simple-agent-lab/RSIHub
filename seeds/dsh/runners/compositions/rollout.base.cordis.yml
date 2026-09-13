@@ -16,9 +16,13 @@
 
 # Route shell-backed tools into the Harbor task container.
 # Never pass `docker exec -t`: headless Harbor hosts have no TTY, and allocating
-# a PTY makes the bash backend exit at startup ("PTY shell exited during startup").
-# Keep `-i` so stdin stays open for the shell-backed tool; bash `-i` still works
-# without a TTY for prompt/env handling inside the task container.
+# a container PTY makes the bash backend exit at startup under node-pty
+# ("PTY shell exited during startup").
+# Never pass interactive `bash -i` either: the agent attaches a host PTY
+# (node-pty) to `docker exec -i` (stdin only), which does not allocate a
+# container TTY — interactive bash then exits during startup. Keep
+# `docker exec -i` so stdin stays open; use `/bin/bash --noprofile --norc`
+# without `-i`. Doctor (`evaluator/doctor_pty_probe.sh`) must match this argv.
 - id: terminal-bash
   config:
     backendType: shell
@@ -42,7 +46,6 @@
       - /bin/bash
       - --noprofile
       - --norc
-      - -i
     idleSilenceMs: 500
     handoffGraceMs: 250
     timeoutMs: 300000

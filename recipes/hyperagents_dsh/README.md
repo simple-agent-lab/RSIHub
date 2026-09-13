@@ -99,8 +99,10 @@ Run these before a multi-generation evolve so infra bugs do not burn tokens:
    count (not the full 30-member train split). A complete limited run must not
    be marked `infra_failed` solely because the split file is larger.
 3. **PTY / docker-exec doctor probe** — `./evolve doctor . --profile experiment`
-   must pass `evaluator_runtime_smoke` (`evaluator/doctor_pty_probe.sh`:
-   non-TTY `docker exec -i … echo ok`).
+   must pass `evaluator_runtime_smoke` (`evaluator/doctor_pty_probe.sh`).
+   The probe must exercise the same exec line as terminal-bash
+   (`docker exec -i … /bin/bash --noprofile --norc`, no `-t`, no bash `-i`),
+   including a host-PTY spawn — not a weaker `/bin/sh -c` pipe-only check.
 4. **Timeouts** — Harbor's default agent timeout (~900s) is independent of
    `DSH_TASK_TIMEOUT_SEC` (recipe default 1800). Long tasks can hit the Harbor
    agent budget first; raise Harbor multipliers only when you intend to.

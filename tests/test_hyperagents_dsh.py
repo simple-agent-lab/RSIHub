@@ -318,14 +318,21 @@ def test_seed_compositions_avoid_removed_spine_demo_package() -> None:
 
 
 def test_rollout_cordis_docker_exec_omits_tty_flag() -> None:
-    """Headless Harbor hosts fail when terminal-bash requests `docker exec -t`."""
+    """Headless Harbor/node-pty fail with `docker exec -t` or interactive bash `-i`."""
     rollout = (ROOT / "seeds/dsh/runners/compositions/rollout.base.cordis.yml").read_text()
     assert "id: terminal-bash" in rollout
     assert "- exec" in rollout
     assert "- -i" in rollout
-    # Forbid allocating a PTY in shellArgs (comments may mention `-t` as forbidden).
+    # Forbid allocating a container PTY in shellArgs (comments may mention `-t`).
     assert "\n      - -t\n" not in rollout
     assert "Never pass `docker exec -t`" in rollout
+    # docker exec keeps `-i`; bash must not be interactive `-i`.
+    assert rollout.count("\n      - -i\n") == 1
+    assert "- /bin/bash\n" in rollout
+    assert "- --noprofile\n" in rollout
+    assert "- --norc\n" in rollout
+    assert "- --norc\n      - -i\n" not in rollout
+    assert "bash -i" in rollout
 
 
 def test_doctor_contract_wires_non_tty_docker_exec_probe() -> None:
@@ -334,6 +341,14 @@ def test_doctor_contract_wires_non_tty_docker_exec_probe() -> None:
     probe = (ROOT / "recipes/hyperagents_dsh/evaluator/doctor_pty_probe.sh").read_text()
     assert "docker exec -t" not in probe
     assert "exec -i" in probe
+    assert "/bin/bash --noprofile --norc" in probe
+    # Comments may mention `/bin/sh -c` as the false-green path; code must not use it.
+    code = "\n".join(
+        line for line in probe.splitlines() if line.strip() and not line.lstrip().startswith("#")
+    )
+    assert "/bin/sh -c" not in code
+    assert "failing closed" in probe
+    assert "script" in probe
     assert "echo ok" in probe
 
 
@@ -350,7 +365,7 @@ def test_doctor_pty_probe_uses_non_tty_exec_with_fake_docker(tmp_path: Path) -> 
             printf '%s\\n' "$*" >> "$log"
             case "$1" in
               image)
-                # Pretend alpine is cached so the probe skips busybox fallback.
+                # Pretend bash image is cached so the probe skips fallbacks/pull.
                 exit 0
                 ;;
               run)
@@ -364,6 +379,34 @@ def test_doctor_pty_probe_uses_non_tty_exec_with_fake_docker(tmp_path: Path) -> 
                     exit 2
                   fi
                 done
+                # Cordis-aligned argv: bash --noprofile --norc (not sh -c, not bash -i).
+                printf '%s\\n' "$*" | grep -q '/bin/bash' || {
+                  echo "expected /bin/bash" >&2
+                  exit 3
+                }
+                printf '%s\\n' "$*" | grep -q -- '--noprofile' || {
+                  echo "expected --noprofile" >&2
+                  exit 3
+                }
+                printf '%s\\n' "$*" | grep -q -- '--norc' || {
+                  echo "expected --norc" >&2
+                  exit 3
+                }
+                printf '%s\\n' "$*" | grep -q -- '/bin/sh' && {
+                  echo "sh -c path is a false green" >&2
+                  exit 3
+                }
+                # Final argv token must not be interactive -i (docker -i appears earlier).
+                last=
+                for arg in "$@"; do
+                  last=$arg
+                done
+                if [ "$last" = "-i" ]; then
+                  echo "interactive bash -i requested" >&2
+                  exit 3
+                fi
+                # Drain stdin (probe feeds 'echo ok') then print the marker.
+                cat >/dev/null
                 printf 'ok\\n'
                 ;;
               rm)
@@ -392,9 +435,15 @@ def test_doctor_pty_probe_uses_non_tty_exec_with_fake_docker(tmp_path: Path) -> 
     )
     assert result.returncode == 0, result.stderr
     assert "non-TTY docker exec ok" in result.stdout
+    assert "host-PTY docker exec ok" in result.stdout
     logged = log.read_text()
     assert "exec -i" in logged
     assert " -t " not in f" {logged} "
+    assert "/bin/bash" in logged
+    assert "--noprofile" in logged
+    assert "--norc" in logged
+    assert "/bin/sh -c" not in logged
+    assert logged.count("/bin/bash") >= 2
 
 
 def test_materialize_candidate_overlay_rewrites_relative_plugins(tmp_path: Path) -> None:
