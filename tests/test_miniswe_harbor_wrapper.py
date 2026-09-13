@@ -166,6 +166,16 @@ def test_miniswe_wrapper_forwards_reasoning_effort(adapter_path: Path, monkeypat
     assert "MINISWE_REASONING_EFFORT" not in module.MiniSweSourceAgent()._source_env()
 
 
+def test_miniswe_wrapper_forwards_max_output_limit(adapter_path: Path, monkeypatch) -> None:
+    _install_fake_harbor(monkeypatch)
+    module = _load(adapter_path)
+    monkeypatch.setenv("MINISWE_MAX_OUTPUT_LIMIT", "10000")
+
+    source_env = module.MiniSweSourceAgent()._source_env()
+
+    assert source_env["MINISWE_MAX_OUTPUT_LIMIT"] == "10000"
+
+
 def test_miniswe_wrapper_source_environment_contains_only_strings(adapter_path: Path, monkeypatch) -> None:
     _install_fake_harbor(monkeypatch)
     module = _load(adapter_path)
@@ -255,6 +265,27 @@ def test_miniswe_wrapper_preserves_explicit_responses_output_budget(adapter_path
 
     assert type(model) is FakeLitellmResponseModel
     assert model.kwargs["model_kwargs"]["max_output_tokens"] == 12_345
+
+
+def test_miniswe_wrapper_runtime_output_limit_overrides_candidate_config(adapter_path: Path, monkeypatch) -> None:
+    _, build_model, (_, FakeLitellmResponseModel) = _load_model_factory(adapter_path, monkeypatch)
+    monkeypatch.setenv("MSWEA_MODEL_NAME", "openai/gpt-5.4")
+    monkeypatch.setenv("MINISWE_MAX_OUTPUT_LIMIT", "10000")
+
+    model = build_model({"model": {"model_kwargs": {"max_output_tokens": 64_000}}})
+
+    assert type(model) is FakeLitellmResponseModel
+    assert model.kwargs["model_kwargs"]["max_output_tokens"] == 10_000
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "invalid"])
+def test_miniswe_wrapper_rejects_invalid_runtime_output_limit(adapter_path: Path, monkeypatch, value: str) -> None:
+    _, build_model, _ = _load_model_factory(adapter_path, monkeypatch)
+    monkeypatch.setenv("MSWEA_MODEL_NAME", "openai/gpt-5.4")
+    monkeypatch.setenv("MINISWE_MAX_OUTPUT_LIMIT", value)
+
+    with pytest.raises(ValueError, match="expected a positive integer"):
+        build_model({"model": {}})
 
 
 def test_miniswe_wrapper_uses_responses_without_openai_reasoning(adapter_path: Path, monkeypatch) -> None:
