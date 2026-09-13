@@ -75,8 +75,10 @@ silently default to a broken node carrier.
   candidate profile (`DSH_CWD` / `target/`). Do not widen this to
   `danger-full-access` for the meta session.
 - Task bash runs through `docker exec -i` (never `-t`) into the Harbor task
-  container. Headless hosts have no TTY; allocating one aborts the bash backend
-  with `PTY shell exited during startup`. Candidate plugins still load in the
+  container with `/bin/bash --noprofile --norc` (never interactive `bash -i`).
+  Headless Harbor/node-pty does not allocate a container TTY; either `-t` or
+  `bash -i` aborts the bash backend with `PTY shell exited during startup`.
+  Candidate plugins still load in the
   host-side dsh process for rollouts; treat that host process as trusted
   evaluation infrastructure (further plugin isolation is a follow-up).
 
