@@ -329,7 +329,7 @@ def test_seed_compositions_avoid_removed_spine_demo_package() -> None:
 
 
 def test_rollout_cordis_docker_exec_omits_tty_flag() -> None:
-    """Headless Harbor forbids `docker exec -t`; bash `-i` is required for prompt readiness."""
+    """Behavioral locks for terminal-bash argv; policy in recipes/hyperagents_dsh/README.md."""
     rollout = (ROOT / "seeds/dsh/runners/compositions/rollout.base.cordis.yml").read_text()
     assert "id: terminal-bash" in rollout
     assert "- exec" in rollout
@@ -538,7 +538,7 @@ def test_doctor_pty_probe_uses_non_tty_exec_with_fake_docker(tmp_path: Path) -> 
 
 
 def test_doctor_pty_probe_resolves_docker_from_path(tmp_path: Path) -> None:
-    """Without DSH_DOCKER_BIN, doctor must which() docker — not assume /usr/bin/docker."""
+    """Doctor resolves docker via PATH when DSH_DOCKER_BIN unset (README canonical policy)."""
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     docker = bin_dir / "docker"

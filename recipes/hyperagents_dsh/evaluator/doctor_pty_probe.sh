@@ -1,22 +1,12 @@
 #!/bin/sh
-# Model-free doctor smoke: prove the same docker argv as
-# seeds/dsh/runners/compositions/rollout.base.cordis.yml (terminal-bash).
-#
-# Cordis uses: docker exec -i … /bin/bash --noprofile --norc -i
-# Never `-t` (container TTY). Bash `-i` is required so terminal-bash prompt
-# readiness (PS1=`dsh> ` + PROMPT_COMMAND OSC `133;D;`) can settle — without
-# `-i` the agent hangs until tool timeoutMs → PERSISTENT_BASH_TIMEOUT.
-#
-# A pipe-only `/bin/sh -c` or non-interactive echo is a false green relative to
-# the agent, which attaches a host PTY (node-pty) and waits for those prompts.
-# This probe sets the controlled prompt env, requires prompt readiness markers,
-# and spawns under a host PTY via `script`. If `script` is unavailable, fail
-# closed — do not treat pipe-exec alone as success.
-# Cheap and read-only aside from a short-lived throwaway container — no Harbor trial.
+# Model-free doctor smoke: same docker argv as rollout.base.cordis.yml terminal-bash.
+# Policy (docker resolve, exec -i without -t, bash -i, host-PTY readiness):
+#   recipes/hyperagents_dsh/README.md § Canonical policy: docker CLI + terminal-bash argv
+# Fail closed if `script` is missing — pipe-only exec is a false green.
+# Cheap throwaway container; no Harbor trial.
 set -eu
 
-# Same resolution as DshAgent / rollout_driver: honor DSH_DOCKER_BIN when set,
-# else PATH. Never fall back to a hard-coded /usr/bin/docker (Homebrew Mac).
+# Resolve docker like DshAgent / rollout_driver (DSH_DOCKER_BIN or PATH).
 if [ -n "${DSH_DOCKER_BIN:-}" ]; then
   DOCKER_BIN=$DSH_DOCKER_BIN
 else

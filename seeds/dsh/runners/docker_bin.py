@@ -1,10 +1,8 @@
 """Resolve the host docker CLI for Harbor docker-exec bash.
 
-Cordis ``terminal-bash`` uses ``shellPath: process.env.DSH_DOCKER_BIN``. Never
-assume ``/usr/bin/docker``: Homebrew Mac installs docker under
-``/opt/homebrew/bin`` and ``/usr/bin/docker`` does not exist. Doctor and the
-agent must resolve the same way so a PATH hit cannot false-green against a
-hard-coded missing fallback.
+Cordis ``terminal-bash`` uses ``shellPath: process.env.DSH_DOCKER_BIN``.
+Policy: recipes/hyperagents_dsh/README.md § Canonical policy (PATH/`DSH_DOCKER_BIN`,
+never hard-code ``/usr/bin/docker``). Doctor and agent must resolve the same way.
 """
 
 from __future__ import annotations

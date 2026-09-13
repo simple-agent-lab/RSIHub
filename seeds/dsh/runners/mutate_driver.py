@@ -23,7 +23,7 @@ from deepseek_harness import DeepSeekHarness
 
 
 def _ensure_runtime_mode() -> None:
-    """Prefer bundled exe; fail clearly when DSH_RUNTIME_MODE=node has no carrier."""
+    """Delegate to runtime_mode.ensure_runtime_mode (exe prefer when unset; prepare pins node for Harbor)."""
     path = Path(__file__).resolve().parent / "runtime_mode.py"
     spec = importlib.util.spec_from_file_location("dsh_runtime_mode", path)
     if spec is None or spec.loader is None:

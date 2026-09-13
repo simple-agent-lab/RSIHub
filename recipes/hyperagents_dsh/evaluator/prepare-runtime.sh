@@ -3,12 +3,11 @@
 # under POSIX sh; KEY=VALUE lines written to $2 are injected into every trial
 # as --ae (agent) and --ve (verifier). Diagnostics go to stderr.
 #
-# Runtime carrier:
-#   DSH_RUNTIME_MODE=exe  — bundled platform exe (no system Node required here;
-#                           drivers still preflight the exe via runtime_mode.py)
-#   DSH_RUNTIME_MODE=node — or unset: require Node >= 22.19 for the node carrier
-# After an editable `uv add` of sdk-runtime, build the carrier with:
-#   pnpm exec tsx scripts/build-exe-for-python-sdk.ts
+# Runtime carrier (see recipes/hyperagents_dsh/README.md § Runtime carrier):
+#   unset / node → force MODE=node, require Node >= 22.19, write DSH_RUNTIME_MODE=node
+#   exe          → skip Node at prepare; drivers still preflight via runtime_mode.py
+# Driver preference for unset env is exe; prepare usually wins for Harbor by pinning node.
+# Build carrier: pnpm exec tsx scripts/build-exe-for-python-sdk.ts
 set -eu
 
 run_dir=${1:?run directory is required}

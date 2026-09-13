@@ -14,21 +14,12 @@
 # Runtime variables (injected by DshAgent / rollout_driver):
 #   DSH_CONTAINER / DSH_CONTAINER_CWD / DSH_DOCKER_BIN / DSH_MODEL
 #
-# DSH_DOCKER_BIN is required: DshAgent and rollout_driver resolve it via
-# DSH_DOCKER_BIN (if executable) or PATH (shutil.which / command -v). Do not
-# fall back to /usr/bin/docker — that path is often missing on Homebrew Mac
-# (/opt/homebrew/bin/docker) and surfaces as "PTY shell exited during startup".
+# DSH_DOCKER_BIN required (agent/driver inject). Full policy:
+#   recipes/hyperagents_dsh/README.md § Canonical policy: docker CLI + terminal-bash argv
+# Locks: Never pass `docker exec -t`; keep bash `-i` (else PERSISTENT_BASH_TIMEOUT).
+# Doctor (evaluator/doctor_pty_probe.sh) must match this argv.
 
 # Route shell-backed tools into the Harbor task container.
-# Never pass `docker exec -t`: headless Harbor hosts have no TTY, and allocating
-# a container PTY makes the bash backend exit at startup under node-pty
-# ("PTY shell exited during startup"). Keep `docker exec -i` (stdin only, no
-# `-t`) so the host PTY (node-pty) can drive the shell.
-# Trailing bash `-i` is required: @deepseek-ai/dsh-terminal-bash readiness waits
-# for interactive PS1=`dsh> ` + PROMPT_COMMAND OSC `133;D;` markers
-# (DEFAULT_BASH_ARGS include `-i`). Dropping `-i` to "fix" PTY startup yields
-# PERSISTENT_BASH_TIMEOUT (no prompts) instead. Doctor
-# (`evaluator/doctor_pty_probe.sh`) must match this argv.
 - id: terminal-bash
   config:
     backendType: shell

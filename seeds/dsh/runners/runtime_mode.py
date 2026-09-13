@@ -10,12 +10,12 @@ the ``runtime/node/`` closure.
 
 Mode selection (``DSH_RUNTIME_MODE``):
 
-- ``exe`` — bundled platform executable (preferred when present; no system Node)
-- ``node`` — dev-only node carrier on system Node >= 22.19 (must opt in)
+- ``exe`` — bundled platform executable (no system Node)
+- ``node`` — node carrier on system Node >= 22.19
 
-When ``DSH_RUNTIME_MODE`` is unset, prefer the bundled exe if resolution
-succeeds; otherwise fail with an actionable message rather than silently
-defaulting to a missing node carrier.
+When unset, *this helper* prefers the bundled exe if resolution succeeds.
+Harbor prepare (``prepare-runtime.sh``) instead forces ``node`` and usually
+wins for eval — see recipes/hyperagents_dsh/README.md § Runtime carrier.
 """
 
 from __future__ import annotations

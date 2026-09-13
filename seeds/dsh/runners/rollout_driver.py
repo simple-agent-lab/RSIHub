@@ -44,15 +44,13 @@ resolve_docker_bin = _load_sibling("dsh_docker_bin", "docker_bin.py").resolve_do
 
 
 def _ensure_runtime_mode() -> None:
-    """Prefer bundled exe; fail clearly when DSH_RUNTIME_MODE=node has no carrier."""
+    """Delegate to runtime_mode.ensure_runtime_mode (exe prefer when unset; prepare pins node for Harbor)."""
     module = _load_sibling("dsh_runtime_mode", "runtime_mode.py")
     module.ensure_runtime_mode()
 
 
 def main() -> int:
-    # Ensure cordis shellPath and local inspect use the same resolved binary.
-    # Prefer DSH_DOCKER_BIN when set; otherwise PATH via shutil.which — never
-    # hard-code /usr/bin/docker (absent on Homebrew Mac).
+    # Same docker resolve as agent (README canonical policy); inject for cordis.
     docker_bin = resolve_docker_bin()
     os.environ["DSH_DOCKER_BIN"] = docker_bin
 

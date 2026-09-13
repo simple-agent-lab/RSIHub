@@ -30,10 +30,8 @@ Optional restricted-network compensations (all no-ops when unset):
   DSH_CONTAINER_PIP_INDEX    pip index URL written to /etc/pip.conf
   DSH_CONTAINER_PROXY        http(s) proxy exported inside the container
   DSH_CONTAINER_NO_PROXY     no_proxy list (default: localhost,127.0.0.1)
-  DSH_DOCKER_BIN             absolute path to the host ``docker`` CLI (optional;
-                             otherwise resolved via ``PATH``). Never assume
-                             ``/usr/bin/docker`` — Homebrew Mac installs under
-                             ``/opt/homebrew/bin``.
+  DSH_DOCKER_BIN             host ``docker`` CLI (optional; else ``PATH``).
+                             See recipes/hyperagents_dsh/README.md § Canonical policy.
 
 This file ships in the seed but sits in ``surface.exclude``: a candidate that
 edits it is rejected as ``invalid_proposal``.
@@ -217,8 +215,7 @@ done
         api_key = self._env("OPENAI_API_KEY")
         if api_key:
             env["DEEPSEEK_API_KEY"] = api_key
-        # Cordis terminal-bash reads DSH_DOCKER_BIN as shellPath. Resolve via
-        # env/PATH (never assume /usr/bin/docker — missing on Homebrew Mac).
+        # Cordis shellPath=DSH_DOCKER_BIN; resolve via env/PATH (README canonical policy).
         docker_bin = resolve_docker_bin(env=env)
         env.update(
             {
