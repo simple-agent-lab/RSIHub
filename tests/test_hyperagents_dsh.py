@@ -323,10 +323,9 @@ def test_rollout_cordis_docker_exec_omits_tty_flag() -> None:
     assert "id: terminal-bash" in rollout
     assert "- exec" in rollout
     assert "- -i" in rollout
-    # Forbid allocating a PTY; keep matching the committed shellArgs list shape.
+    # Forbid allocating a PTY in shellArgs (comments may mention `-t` as forbidden).
     assert "\n      - -t\n" not in rollout
-    assert "docker exec -t" not in rollout
-    assert "Never pass `docker exec -t`" in rollout or "never" in rollout.lower()
+    assert "Never pass `docker exec -t`" in rollout
 
 
 def test_doctor_contract_wires_non_tty_docker_exec_probe() -> None:
@@ -382,7 +381,12 @@ def test_doctor_pty_probe_uses_non_tty_exec_with_fake_docker(tmp_path: Path) -> 
     log = tmp_path / "docker.log"
     result = subprocess.run(
         ["sh", str(ROOT / "recipes/hyperagents_dsh/evaluator/doctor_pty_probe.sh")],
-        env={**os.environ, "DSH_DOCKER_BIN": str(docker), "DOCTOR_PTY_FAKE_LOG": str(log), "PATH": str(bin_dir)},
+        env={
+            **os.environ,
+            "DSH_DOCKER_BIN": str(docker),
+            "DOCTOR_PTY_FAKE_LOG": str(log),
+            "PATH": f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '/usr/bin:/bin')}",
+        },
         capture_output=True,
         text=True,
     )
