@@ -329,7 +329,7 @@ def test_seed_compositions_avoid_removed_spine_demo_package() -> None:
 
 
 def test_rollout_cordis_docker_exec_omits_tty_flag() -> None:
-    """Headless Harbor/node-pty fail with `docker exec -t` or interactive bash `-i`."""
+    """Headless Harbor forbids `docker exec -t`; bash `-i` is required for prompt readiness."""
     rollout = (ROOT / "seeds/dsh/runners/compositions/rollout.base.cordis.yml").read_text()
     assert "id: terminal-bash" in rollout
     assert "- exec" in rollout
@@ -337,13 +337,14 @@ def test_rollout_cordis_docker_exec_omits_tty_flag() -> None:
     # Forbid allocating a container PTY in shellArgs (comments may mention `-t`).
     assert "\n      - -t\n" not in rollout
     assert "Never pass `docker exec -t`" in rollout
-    # docker exec keeps `-i`; bash must not be interactive `-i`.
-    assert rollout.count("\n      - -i\n") == 1
+    # docker exec keeps `-i`; trailing bash `-i` after --noprofile/--norc is required.
     assert "- /bin/bash\n" in rollout
     assert "- --noprofile\n" in rollout
     assert "- --norc\n" in rollout
-    assert "- --norc\n      - -i\n" not in rollout
-    assert "bash -i" in rollout
+    assert "- --norc\n      - -i\n" in rollout
+    # Two `-i` entries: docker exec -i and bash -i (not a lone docker -i).
+    assert rollout.count("\n      - -i\n") == 2
+    assert "PERSISTENT_BASH_TIMEOUT" in rollout
     # Agent/driver must inject DSH_DOCKER_BIN — no hard-coded /usr/bin/docker.
     assert "shellPath: !!js process.env.DSH_DOCKER_BIN" in rollout
     assert "'/usr/bin/docker'" not in rollout
@@ -424,7 +425,9 @@ def test_doctor_contract_wires_non_tty_docker_exec_probe() -> None:
     probe = (ROOT / "recipes/hyperagents_dsh/evaluator/doctor_pty_probe.sh").read_text()
     assert "docker exec -t" not in probe
     assert "exec -i" in probe
-    assert "/bin/bash --noprofile --norc" in probe
+    assert "/bin/bash --noprofile --norc -i" in probe
+    assert "PS1='dsh> '" in probe
+    assert "133;D;" in probe
     # Comments may mention `/bin/sh -c` as the false-green path; code must not use it.
     code = "\n".join(line for line in probe.splitlines() if line.strip() and not line.lstrip().startswith("#"))
     assert "/bin/sh -c" not in code
@@ -434,6 +437,7 @@ def test_doctor_contract_wires_non_tty_docker_exec_probe() -> None:
     assert "DSH_DOCKER_BIN" in probe
     assert "/usr/bin/docker" in probe  # documented as the forbidden assumption
     assert "using docker at" in probe
+    assert "PERSISTENT_BASH_TIMEOUT" in probe
 
 
 def test_doctor_pty_probe_uses_non_tty_exec_with_fake_docker(tmp_path: Path) -> None:
@@ -463,7 +467,7 @@ def test_doctor_pty_probe_uses_non_tty_exec_with_fake_docker(tmp_path: Path) -> 
                     exit 2
                   fi
                 done
-                # Cordis-aligned argv: bash --noprofile --norc (not sh -c, not bash -i).
+                # Cordis-aligned argv: bash --noprofile --norc -i (not sh -c).
                 printf '%s\\n' "$*" | grep -q '/bin/bash' || {
                   echo "expected /bin/bash" >&2
                   exit 3
@@ -480,18 +484,19 @@ def test_doctor_pty_probe_uses_non_tty_exec_with_fake_docker(tmp_path: Path) -> 
                   echo "sh -c path is a false green" >&2
                   exit 3
                 }
-                # Final argv token must not be interactive -i (docker -i appears earlier).
+                # Final argv token must be interactive -i (docker -i appears earlier).
                 last=
                 for arg in "$@"; do
                   last=$arg
                 done
-                if [ "$last" = "-i" ]; then
-                  echo "interactive bash -i requested" >&2
+                if [ "$last" != "-i" ]; then
+                  echo "expected trailing interactive bash -i" >&2
                   exit 3
                 fi
-                # Drain stdin (probe feeds 'echo ok') then print the marker.
+                # Drain stdin (probe feeds 'echo ok' / exit) then emit readiness + marker.
                 cat >/dev/null
-                printf 'ok\\n'
+                # Mirror terminal-bash controlled prompt (OSC + PS1) then echo marker.
+                printf '\\033]133;D;0\\007dsh> ok\\n'
                 ;;
               rm)
                 exit 0
@@ -527,6 +532,7 @@ def test_doctor_pty_probe_uses_non_tty_exec_with_fake_docker(tmp_path: Path) -> 
     assert "/bin/bash" in logged
     assert "--noprofile" in logged
     assert "--norc" in logged
+    assert "/bin/bash --noprofile --norc -i" in logged or logged.count(" -i") >= 2
     assert "/bin/sh -c" not in logged
     assert logged.count("/bin/bash") >= 2
 
@@ -546,7 +552,7 @@ def test_doctor_pty_probe_resolves_docker_from_path(tmp_path: Path) -> None:
               run) printf 'fake-cid\\n' ;;
               exec)
                 cat >/dev/null
-                printf 'ok\\n'
+                printf '\\033]133;D;0\\007dsh> ok\\n'
                 ;;
               rm) exit 0 ;;
               *) exit 1 ;;

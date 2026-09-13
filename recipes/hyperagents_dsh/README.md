@@ -75,9 +75,10 @@ silently default to a broken node carrier.
   candidate profile (`DSH_CWD` / `target/`). Do not widen this to
   `danger-full-access` for the meta session.
 - Task bash runs through `docker exec -i` (never `-t`) into the Harbor task
-  container with `/bin/bash --noprofile --norc` (never interactive `bash -i`).
-  Headless Harbor/node-pty does not allocate a container TTY; either `-t` or
-  `bash -i` aborts the bash backend with `PTY shell exited during startup`.
+  container with `/bin/bash --noprofile --norc -i`. Keep bash `-i`: terminal-bash
+  readiness needs interactive PS1/`PROMPT_COMMAND` OSC markers; dropping `-i`
+  yields `PERSISTENT_BASH_TIMEOUT` (no prompts) rather than fixing PTY startup.
+  Never add `docker exec -t` (container TTY) under headless Harbor/node-pty.
   The host `docker` CLI is resolved via `DSH_DOCKER_BIN` or `PATH` — do **not**
   assume `/usr/bin/docker` (Homebrew Mac: `/opt/homebrew/bin/docker`). Doctor
   and the agent must agree on that resolution so PATH-only installs are not a
@@ -107,8 +108,9 @@ Run these before a multi-generation evolve so infra bugs do not burn tokens:
 3. **PTY / docker-exec doctor probe** — `./evolve doctor . --profile experiment`
    must pass `evaluator_runtime_smoke` (`evaluator/doctor_pty_probe.sh`).
    The probe must exercise the same exec line as terminal-bash
-   (`docker exec -i … /bin/bash --noprofile --norc`, no `-t`, no bash `-i`),
-   including a host-PTY spawn — not a weaker `/bin/sh -c` pipe-only check.
+   (`docker exec -i … /bin/bash --noprofile --norc -i`, no `-t`; keep bash `-i`),
+   including a host-PTY spawn and prompt-readiness markers — not a weaker
+   `/bin/sh -c` pipe-only check. Timeout without a prompt = readiness hang.
 4. **Timeouts** — Harbor's default agent timeout (~900s) is independent of
    `DSH_TASK_TIMEOUT_SEC` (recipe default 1800). Long tasks can hit the Harbor
    agent budget first; raise Harbor multipliers only when you intend to.

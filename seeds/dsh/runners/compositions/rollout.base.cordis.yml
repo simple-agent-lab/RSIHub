@@ -22,12 +22,13 @@
 # Route shell-backed tools into the Harbor task container.
 # Never pass `docker exec -t`: headless Harbor hosts have no TTY, and allocating
 # a container PTY makes the bash backend exit at startup under node-pty
-# ("PTY shell exited during startup").
-# Never pass interactive `bash -i` either: the agent attaches a host PTY
-# (node-pty) to `docker exec -i` (stdin only), which does not allocate a
-# container TTY — interactive bash then exits during startup. Keep
-# `docker exec -i` so stdin stays open; use `/bin/bash --noprofile --norc`
-# without `-i`. Doctor (`evaluator/doctor_pty_probe.sh`) must match this argv.
+# ("PTY shell exited during startup"). Keep `docker exec -i` (stdin only, no
+# `-t`) so the host PTY (node-pty) can drive the shell.
+# Trailing bash `-i` is required: @deepseek-ai/dsh-terminal-bash readiness waits
+# for interactive PS1=`dsh> ` + PROMPT_COMMAND OSC `133;D;` markers
+# (DEFAULT_BASH_ARGS include `-i`). Dropping `-i` to "fix" PTY startup yields
+# PERSISTENT_BASH_TIMEOUT (no prompts) instead. Doctor
+# (`evaluator/doctor_pty_probe.sh`) must match this argv.
 - id: terminal-bash
   config:
     backendType: shell
@@ -51,6 +52,7 @@
       - /bin/bash
       - --noprofile
       - --norc
+      - -i
     idleSilenceMs: 500
     handoffGraceMs: 250
     timeoutMs: 300000

@@ -1,15 +1,17 @@
 #!/bin/sh
-# Model-free doctor smoke: prove the same non-TTY docker argv as
+# Model-free doctor smoke: prove the same docker argv as
 # seeds/dsh/runners/compositions/rollout.base.cordis.yml (terminal-bash).
 #
-# Cordis uses: docker exec -i … /bin/bash --noprofile --norc
-# Never `-t` (container TTY) and never interactive bash `-i` — both break
-# headless Harbor/node-pty ("PTY shell exited during startup").
+# Cordis uses: docker exec -i … /bin/bash --noprofile --norc -i
+# Never `-t` (container TTY). Bash `-i` is required so terminal-bash prompt
+# readiness (PS1=`dsh> ` + PROMPT_COMMAND OSC `133;D;`) can settle — without
+# `-i` the agent hangs until tool timeoutMs → PERSISTENT_BASH_TIMEOUT.
 #
-# A pipe-only `/bin/sh -c` check is a false green relative to the agent, which
-# attaches a host PTY (node-pty) to that docker argv. This probe matches the
-# argv, then also spawns it under a host PTY via `script`. If `script` is
-# unavailable, fail closed — do not treat pipe-exec alone as success.
+# A pipe-only `/bin/sh -c` or non-interactive echo is a false green relative to
+# the agent, which attaches a host PTY (node-pty) and waits for those prompts.
+# This probe sets the controlled prompt env, requires prompt readiness markers,
+# and spawns under a host PTY via `script`. If `script` is unavailable, fail
+# closed — do not treat pipe-exec alone as success.
 # Cheap and read-only aside from a short-lived throwaway container — no Harbor trial.
 set -eu
 
@@ -26,6 +28,15 @@ fi
   exit 1
 }
 printf 'doctor_pty_probe: using docker at %s\n' "$DOCKER_BIN"
+
+# Mirror @deepseek-ai/dsh-terminal-bash childEnvironment controlled prompt.
+# Without interactive bash these never fire → agent readiness hang.
+export PS1='dsh> '
+# shellcheck disable=SC2016
+export PROMPT_COMMAND='printf "\033]133;D;%s\007" "$?"; PS1='"'"'dsh> '"'"''
+export TERM="${TERM:-dumb}"
+export PAGER="${PAGER:-cat}"
+export GIT_PAGER="${GIT_PAGER:-cat}"
 
 cid=
 cleanup() {
@@ -50,9 +61,20 @@ fi
 
 cid=$("$DOCKER_BIN" run -d --rm "$image" sleep 60)
 
-# Cordis-aligned exec: stdin open (`-i`), no container TTY (`-t`), non-interactive bash.
-cordis_exec() {
-  "$DOCKER_BIN" exec -i \
+# Bound hangs when interactive prompt readiness never arrives (agent analogue of
+# PERSISTENT_BASH_TIMEOUT). macOS may lack GNU timeout — fall through then.
+# Args must be real executables (timeout cannot invoke shell functions).
+run_bounded() {
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "${DOCTOR_PTY_TIMEOUT_SEC:-20}" "$@"
+  else
+    "$@"
+  fi
+}
+
+# Cordis-aligned argv fragments (stdin open via -i, no -t, trailing bash -i).
+cordis_docker_exec() {
+  run_bounded "$DOCKER_BIN" exec -i \
     -e PS1 \
     -e PROMPT_COMMAND \
     -e TERM \
@@ -60,28 +82,41 @@ cordis_exec() {
     -e GIT_PAGER \
     -w / \
     "$cid" \
-    /bin/bash --noprofile --norc
+    /bin/bash --noprofile --norc -i
 }
 
-expect_ok() {
+expect_ready() {
   label=$1
-  # script(1) may emit CR; match ok anywhere (do not require line-1 — host PTY
-  # wrappers can prefix noise). Avoid piping script -e into head (SIGPIPE).
+  # script(1) may emit CR; match markers anywhere. Avoid piping script -e into
+  # head (SIGPIPE). Require both echo marker and prompt readiness.
   out=$(printf '%s\n' "$2" | tr -d '\r')
   case "$out" in
     *ok*)
+      ;;
+    *)
+      printf 'doctor_pty_probe: %s missing echo marker (ok): %s\n' "$label" "$out" >&2
+      exit 1
+      ;;
+  esac
+  # Controlled prompt: printable PS1 and/or OSC 133;D; from PROMPT_COMMAND.
+  case "$out" in
+    *'dsh> '*|*'133;D;'*)
       printf 'doctor_pty_probe: %s ok\n' "$label"
       ;;
     *)
-      printf 'doctor_pty_probe: %s unexpected output: %s\n' "$label" "$out" >&2
+      printf 'doctor_pty_probe: %s missing prompt readiness (dsh> / OSC 133;D) — non-interactive bash would hang the agent: %s\n' "$label" "$out" >&2
       exit 1
       ;;
   esac
 }
 
-# 1) Pipe stdin with the real bash argv (not /bin/sh -c).
-pipe_out=$(printf 'echo ok\n' | cordis_exec)
-expect_ok "non-TTY docker exec" "$pipe_out"
+# 1) Pipe stdin with the real interactive bash argv (not /bin/sh -c). Merge
+# stderr so PS1 prompt text is visible alongside PROMPT_COMMAND OSC on stdout.
+pipe_out=$(printf 'echo ok\nexit\n' | cordis_docker_exec 2>&1) || {
+  echo "doctor_pty_probe: non-TTY docker exec failed or timed out (interactive bash readiness hang?)" >&2
+  exit 1
+}
+expect_ready "non-TTY docker exec" "$pipe_out"
 
 # 2) Agent-like host PTY: same argv under script(1). Fail closed if unavailable.
 if ! command -v script >/dev/null 2>&1; then
@@ -94,13 +129,19 @@ DOCTOR_PTY_PROBE_DOCKER="$DOCKER_BIN"
 DOCTOR_PTY_PROBE_CID="$cid"
 export DOCTOR_PTY_PROBE_DOCKER DOCTOR_PTY_PROBE_CID
 # shellcheck disable=SC2016
-pty_cmd='"$DOCTOR_PTY_PROBE_DOCKER" exec -i -e PS1 -e PROMPT_COMMAND -e TERM -e PAGER -e GIT_PAGER -w / "$DOCTOR_PTY_PROBE_CID" /bin/bash --noprofile --norc'
+pty_cmd='"$DOCTOR_PTY_PROBE_DOCKER" exec -i -e PS1 -e PROMPT_COMMAND -e TERM -e PAGER -e GIT_PAGER -w / "$DOCTOR_PTY_PROBE_CID" /bin/bash --noprofile --norc -i'
 
 if script -q -e -c "true" /dev/null >/dev/null 2>&1; then
   # util-linux: script -q -e -c '…' /dev/null
-  pty_out=$(printf 'echo ok\n' | script -q -e -c "$pty_cmd" /dev/null)
+  pty_out=$(printf 'echo ok\nexit\n' | run_bounded script -q -e -c "$pty_cmd" /dev/null 2>&1) || {
+    echo "doctor_pty_probe: host-PTY docker exec failed or timed out (interactive bash readiness hang?)" >&2
+    exit 1
+  }
 else
   # BSD/macOS: script -q /dev/null command…
-  pty_out=$(printf 'echo ok\n' | script -q /dev/null sh -c "$pty_cmd")
+  pty_out=$(printf 'echo ok\nexit\n' | run_bounded script -q /dev/null sh -c "$pty_cmd" 2>&1) || {
+    echo "doctor_pty_probe: host-PTY docker exec failed or timed out (interactive bash readiness hang?)" >&2
+    exit 1
+  }
 fi
-expect_ok "host-PTY docker exec" "$pty_out"
+expect_ready "host-PTY docker exec" "$pty_out"
