@@ -15,6 +15,10 @@
 #   DSH_CONTAINER / DSH_CONTAINER_CWD / DSH_DOCKER_BIN / DSH_MODEL
 
 # Route shell-backed tools into the Harbor task container.
+# Never pass `docker exec -t`: headless Harbor hosts have no TTY, and allocating
+# a PTY makes the bash backend exit at startup ("PTY shell exited during startup").
+# Keep `-i` so stdin stays open for the shell-backed tool; bash `-i` still works
+# without a TTY for prompt/env handling inside the task container.
 - id: terminal-bash
   config:
     backendType: shell
@@ -22,7 +26,6 @@
     shellArgs:
       - exec
       - -i
-      - -t
       - -e
       - PS1
       - -e

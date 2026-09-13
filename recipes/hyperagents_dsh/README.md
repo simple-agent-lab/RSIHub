@@ -69,15 +69,16 @@ silently default to a broken node carrier.
 
 - **Node ≥ 22.19** must be on `PATH` (or `DSH_NODE_BIN`) when using `DSH_RUNTIME_MODE=node` (the default prepare path).
   `evaluator/prepare-runtime.sh` rejects older releases (including Node 22.0–22.18)
-  before every evaluation; `evaluator/doctor.json` requires `DSH_NODE_BIN` to be
-  an executable so doctor/preflight surfaces a missing runtime early.
+  before every evaluation; `evaluator/doctor.json` requires `DSH_RUNTIME_MODE` and
+  runs a non-TTY `docker exec` smoke so doctor/preflight fails before a long evolve.
 - Mutation sessions use dsh `sandbox-policy` mode `workspace-write` rooted at the
   candidate profile (`DSH_CWD` / `target/`). Do not widen this to
   `danger-full-access` for the meta session.
-- Task bash runs through `docker exec` into the Harbor task container. Candidate
-  plugins still load in the host-side dsh process for rollouts; treat that host
-  process as trusted evaluation infrastructure (further plugin isolation is a
-  follow-up).
+- Task bash runs through `docker exec -i` (never `-t`) into the Harbor task
+  container. Headless hosts have no TTY; allocating one aborts the bash backend
+  with `PTY shell exited during startup`. Candidate plugins still load in the
+  host-side dsh process for rollouts; treat that host process as trusted
+  evaluation infrastructure (further plugin isolation is a follow-up).
 
 The evaluator model is passed through to dsh and routed via `OPENAI_BASE_URL` /
 `OPENAI_API_KEY` (mapped onto dsh's `DEEPSEEK_*`); the meta session's model
@@ -85,3 +86,21 @@ defaults to dsh's native default and can be overridden with `DSH_META_MODEL`.
 Restricted-network hosts can set the optional `DSH_ASSETS_DIR` /
 `DSH_CONTAINER_APT_MIRROR` / `DSH_CONTAINER_PIP_INDEX` /
 `DSH_CONTAINER_PROXY` compensations described in `seeds/dsh/README.md`.
+
+## Pre-experiment checklist
+
+Run these before a multi-generation evolve so infra bugs do not burn tokens:
+
+1. **Model pin** — commit `evaluator.model` (and related env) and retag `gen/0`
+   after changing the evaluator model so genesis stays aligned with the frozen
+   identity.
+2. **Limited-run expected_trials** — for smoke or `--tasks N` runs, confirm
+   `run-plan.json` / `EVOLVE_HARBOR_EXPECTED_TRIALS` matches the planned task
+   count (not the full 30-member train split). A complete limited run must not
+   be marked `infra_failed` solely because the split file is larger.
+3. **PTY / docker-exec doctor probe** — `./evolve doctor . --profile experiment`
+   must pass `evaluator_runtime_smoke` (`evaluator/doctor_pty_probe.sh`:
+   non-TTY `docker exec -i … echo ok`).
+4. **Timeouts** — Harbor's default agent timeout (~900s) is independent of
+   `DSH_TASK_TIMEOUT_SEC` (recipe default 1800). Long tasks can hit the Harbor
+   agent budget first; raise Harbor multipliers only when you intend to.

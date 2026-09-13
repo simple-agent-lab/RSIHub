@@ -31,22 +31,43 @@ def _write_outputs(run_dir: Path, *, status: str, metrics: dict[str, object], sc
     (run_dir / "metrics.json").write_text(json.dumps({"dimensions": metrics}, indent=2, sort_keys=True) + "\n")
 
 
+def _attempts(env_values: dict[str, str]) -> int:
+    return max(1, int(env_values.get("EVOLVE_HARBOR_ATTEMPTS", "1")))
+
+
 def _expected_trials(run_dir: Path, env_values: dict[str, str]) -> int:
+    """Resolve how many trials this run owed.
+
+    Prefer the host run plan and the limited-run env override over task-split.json.
+    A smoke/limited evaluation may leave the full train split recorded while only
+    running N planned trials; treating the full split as expected_trials would
+    mark a successful limited run as infra_failed.
+    """
+    attempts = _attempts(env_values)
+    plan_path = run_dir / "run-plan.json"
+    if plan_path.exists():
+        payload = json.loads(plan_path.read_text())
+        if isinstance(payload, dict):
+            planned = payload.get("expected_trials")
+            if isinstance(planned, int) and not isinstance(planned, bool) and planned >= 1:
+                return planned
+            tasks = payload.get("tasks")
+            if isinstance(tasks, list) and tasks:
+                return max(1, len(tasks) * attempts)
+    for raw in (
+        os.environ.get("EVOLVE_HARBOR_EXPECTED_TRIALS"),
+        env_values.get("EVOLVE_HARBOR_EXPECTED_TRIALS"),
+        env_values.get("EVOLVE_HARBOR_N"),
+    ):
+        if raw is not None and str(raw).strip():
+            return max(1, int(raw))
     selection = run_dir / "task-split.json"
     if selection.exists():
         payload = json.loads(selection.read_text())
         tasks = payload.get("tasks") if isinstance(payload, dict) else None
-        if isinstance(tasks, list):
-            return max(1, len(tasks) * int(env_values.get("EVOLVE_HARBOR_ATTEMPTS", "1")))
-    return max(
-        1,
-        int(
-            os.environ.get(
-                "EVOLVE_HARBOR_EXPECTED_TRIALS",
-                env_values.get("EVOLVE_HARBOR_EXPECTED_TRIALS", env_values.get("EVOLVE_HARBOR_N", "1")),
-            )
-        ),
-    )
+        if isinstance(tasks, list) and tasks:
+            return max(1, len(tasks) * attempts)
+    return 1
 
 
 def main(argv: list[str]) -> int:

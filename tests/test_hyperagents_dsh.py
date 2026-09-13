@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import json
 import os
 import random
 import stat
@@ -314,6 +315,82 @@ def test_seed_compositions_avoid_removed_spine_demo_package() -> None:
     rollout = (ROOT / "seeds/dsh/runners/compositions/rollout.base.cordis.yml").read_text()
     assert "cordis-plugin-include" not in rollout
     assert "__CANDIDATE_PROFILE__" not in rollout
+
+
+def test_rollout_cordis_docker_exec_omits_tty_flag() -> None:
+    """Headless Harbor hosts fail when terminal-bash requests `docker exec -t`."""
+    rollout = (ROOT / "seeds/dsh/runners/compositions/rollout.base.cordis.yml").read_text()
+    assert "id: terminal-bash" in rollout
+    assert "- exec" in rollout
+    assert "- -i" in rollout
+    # Forbid allocating a PTY; keep matching the committed shellArgs list shape.
+    assert "\n      - -t\n" not in rollout
+    assert "docker exec -t" not in rollout
+    assert "Never pass `docker exec -t`" in rollout or "never" in rollout.lower()
+
+
+def test_doctor_contract_wires_non_tty_docker_exec_probe() -> None:
+    contract = json.loads((ROOT / "recipes/hyperagents_dsh/evaluator/doctor.json").read_text())
+    assert contract["smoke"]["command"] == ["sh", "evaluator/doctor_pty_probe.sh"]
+    probe = (ROOT / "recipes/hyperagents_dsh/evaluator/doctor_pty_probe.sh").read_text()
+    assert "docker exec -t" not in probe
+    assert "exec -i" in probe
+    assert "echo ok" in probe
+
+
+def test_doctor_pty_probe_uses_non_tty_exec_with_fake_docker(tmp_path: Path) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    docker = bin_dir / "docker"
+    docker.write_text(
+        textwrap.dedent(
+            """\
+            #!/bin/sh
+            set -eu
+            log="${DOCTOR_PTY_FAKE_LOG:?}"
+            printf '%s\\n' "$*" >> "$log"
+            case "$1" in
+              image)
+                # Pretend alpine is cached so the probe skips busybox fallback.
+                exit 0
+                ;;
+              run)
+                printf 'fake-cid\\n'
+                ;;
+              exec)
+                # Refuse if a TTY was requested.
+                for arg in "$@"; do
+                  if [ "$arg" = "-t" ] || [ "$arg" = "-it" ] || [ "$arg" = "-ti" ]; then
+                    echo "PTY requested" >&2
+                    exit 2
+                  fi
+                done
+                printf 'ok\\n'
+                ;;
+              rm)
+                exit 0
+                ;;
+              *)
+                echo "unexpected docker invocation: $*" >&2
+                exit 1
+                ;;
+            esac
+            """
+        )
+    )
+    docker.chmod(docker.stat().st_mode | stat.S_IXUSR)
+    log = tmp_path / "docker.log"
+    result = subprocess.run(
+        ["sh", str(ROOT / "recipes/hyperagents_dsh/evaluator/doctor_pty_probe.sh")],
+        env={**os.environ, "DSH_DOCKER_BIN": str(docker), "DOCTOR_PTY_FAKE_LOG": str(log), "PATH": str(bin_dir)},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "non-TTY docker exec ok" in result.stdout
+    logged = log.read_text()
+    assert "exec -i" in logged
+    assert " -t " not in f" {logged} "
 
 
 def test_materialize_candidate_overlay_rewrites_relative_plugins(tmp_path: Path) -> None:

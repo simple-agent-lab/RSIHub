@@ -1076,7 +1076,7 @@ def test_score_parser_accepts_complete_final_vector_after_nonzero_harbor_exit(tm
     assert metrics["completed_trials"] == 2
 
 
-def test_score_parser_prefers_frozen_selection_over_explicit_task_limit(tmp_path: Path) -> None:
+def test_score_parser_prefers_expected_trials_env_over_full_task_split(tmp_path: Path) -> None:
     evaluator = tmp_path / "evaluator"
     evaluator.mkdir()
     _write_evaluator_helpers(evaluator)
@@ -1106,12 +1106,52 @@ def test_score_parser_prefers_frozen_selection_over_explicit_task_limit(tmp_path
         capture_output=True,
     )
 
-    assert result.returncode == 3, result.stderr
-    assert (run_dir / "status").read_text().strip() == "infra_failed"
+    assert result.returncode == 0, result.stderr
+    assert (run_dir / "status").read_text().strip() == "complete"
     metrics = json.loads((run_dir / "metrics.json").read_text())["dimensions"]
-    assert metrics["expected_trials"] == 30
+    assert metrics["expected_trials"] == 1
     assert metrics["completed_trials"] == 1
-    assert metrics["missing_trials"] == 29
+    assert metrics["missing_trials"] == 0
+
+
+def test_score_parser_prefers_run_plan_over_full_task_split(tmp_path: Path) -> None:
+    evaluator = tmp_path / "evaluator"
+    evaluator.mkdir()
+    _write_evaluator_helpers(evaluator)
+    (evaluator / "eval.env").write_text("EVOLVE_HARBOR_EXPECTED_TRIALS=30\nEVOLVE_HARBOR_ATTEMPTS=1\n")
+    jobs = tmp_path / "jobs"
+    for name in ("case-a", "case-b"):
+        trial = jobs / name / "trial"
+        trial.mkdir(parents=True)
+        (trial / "result.json").write_text(
+            json.dumps(
+                {
+                    "task_name": name,
+                    "trial_name": "trial",
+                    "verifier_result": {"rewards": {"reward": 1.0}},
+                }
+            )
+        )
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    (run_dir / "task-split.json").write_text(json.dumps({"tasks": [f"case-{index}" for index in range(30)]}))
+    (run_dir / "run-plan.json").write_text(
+        json.dumps({"tasks": ["case-a", "case-b"], "expected_trials": 2, "attempts_per_task": 1})
+    )
+
+    result = subprocess.run(
+        [sys.executable, str(evaluator / "parse_score.py"), str(jobs), str(run_dir), "0"],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert (run_dir / "status").read_text().strip() == "complete"
+    metrics = json.loads((run_dir / "metrics.json").read_text())["dimensions"]
+    assert metrics["expected_trials"] == 2
+    assert metrics["completed_trials"] == 2
+    assert metrics["missing_trials"] == 0
 
 
 def test_harbor_shell_uses_canonical_parser_result() -> None:
