@@ -343,9 +343,7 @@ def test_doctor_contract_wires_non_tty_docker_exec_probe() -> None:
     assert "exec -i" in probe
     assert "/bin/bash --noprofile --norc" in probe
     # Comments may mention `/bin/sh -c` as the false-green path; code must not use it.
-    code = "\n".join(
-        line for line in probe.splitlines() if line.strip() and not line.lstrip().startswith("#")
-    )
+    code = "\n".join(line for line in probe.splitlines() if line.strip() and not line.lstrip().startswith("#"))
     assert "/bin/sh -c" not in code
     assert "failing closed" in probe
     assert "script" in probe
