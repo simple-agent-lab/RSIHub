@@ -23,7 +23,7 @@ cleanup() {
 trap cleanup EXIT
 
 case "$RECIPE" in
-  aevolve|ahe|hyperagents|ahe_codex|gepa|hill_climb|hill_climb_codex|hyperagents_codex|hyperagents_dsh|hyperagents_tbench_full|hyperagents_codex_tbench_full) ;;
+  aevolve|ahe|hyperagents|ahe_codex|gepa|hill_climb|hill_climb_codex|hyperagents_codex|hyperagents_dsh|hyperagents_tbench_full|hyperagents_codex_tbench_full|meta_harness) ;;
   *)
     [[ -f "$RECIPE" || -f "$RECIPE/evolve.yaml" ]] || {
       echo "unsupported recipe; supported recipes are Terminal-Bench profiles or a recipe YAML path" >&2; exit 2;

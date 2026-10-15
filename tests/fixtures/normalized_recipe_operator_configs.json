@@ -520,5 +520,39 @@
       "seed": 0
     },
     "validate": {}
+  },
+  "meta_harness": {
+    "select": {
+      "seed": 0
+    },
+    "rollout": {
+      "field_limit": 2000,
+      "pass_threshold": 1.0
+    },
+    "analyze": {
+      "history_cycles": 2,
+      "max_chars": 30000,
+      "max_observations": 30
+    },
+    "mutate": {
+      "agent": "codex",
+      "agent_kwargs": {
+        "reasoning_effort": "xhigh"
+      },
+      "editable_roots": [
+        "target"
+      ],
+      "environment": "docker",
+      "expose_gate_data": false,
+      "image": "evolve-mutate-codex:20260818-codex0146",
+      "max_retries": 1,
+      "memory_dir": "target/memory",
+      "model": "gpt-5.4",
+      "prompt_path": "target/src/minisweagent/config/mini.yaml",
+      "runner": "harbor",
+      "skills_dir": "target/skills"
+    },
+    "gate": {},
+    "record": {}
   }
 }

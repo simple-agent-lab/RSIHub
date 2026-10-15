@@ -21,6 +21,7 @@ The result contains changed paths, notes, and usage.
 | `ahe` | make one testable agent-harness change from current evidence |
 | `gepa` | reflect on configured components and propose a component edit |
 | `hyperagents` | self-referential mutation that may co-evolve target and selected operator policy |
+| `meta_harness` | one falsifiable harness change, proposed from every prior candidate's code, scores, and traces |
 
 ## Runner configuration
 

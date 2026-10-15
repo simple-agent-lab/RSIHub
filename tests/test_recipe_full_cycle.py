@@ -28,6 +28,7 @@ RECIPES = (
     "hill_climb_codex",
     "hyperagents",
     "hyperagents_codex",
+    "meta_harness",
 )
 
 

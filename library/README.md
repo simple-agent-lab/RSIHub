@@ -16,9 +16,10 @@ library/
 ├─ _methods_shared/
 │  └─ gepa/     GEPA-private helpers shared across its stages
 ├─ select/      greedy · newest · pareto · random · score_weighted
-├─ rollout/     failure_focused · harbor · noop · parent_evaluation
+├─ rollout/     failure_focused · harbor · meta_harness · noop · parent_evaluation
+│  └─ _support/ certified evaluation replay
 ├─ analyze/     failure_patterns · trace_browser · trajectory_only · …
-├─ mutate/      aevolve · ahe · gepa · hyperagents
+├─ mutate/      aevolve · ahe · gepa · hyperagents · meta_harness
 │  └─ _support/ shared evidence loading
 ├─ validate/    hyperagents · minibatch_improvement · node_check
 ├─ novelty/     accept_all · diff_similarity
@@ -92,7 +93,7 @@ executable escape hatch but is reported as non-portable.
 
 ## Harbor mutation execution
 
-The `aevolve`, `ahe`, `gepa`, and `hyperagents` mutate operators choose an
+The `aevolve`, `ahe`, `gepa`, `hyperagents`, and `meta_harness` mutate operators choose an
 improvement strategy. Their `runner` config selects a trusted local command or
 an isolated Harbor editing agent:
 

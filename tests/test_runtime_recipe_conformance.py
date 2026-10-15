@@ -45,7 +45,7 @@ def test_partner_recipe_runtime_conformance(
 
 
 def test_builtin_recipes_declare_runtime_only_for_candidate_preparation() -> None:
-    expected = {"ahe", "hill_climb", "hyperagents", "hyperagents_tbench_full"}
+    expected = {"ahe", "hill_climb", "hyperagents", "hyperagents_tbench_full", "meta_harness"}
     configured = set()
     for recipe in recipe_root().iterdir():
         path = recipe / "evolve.yaml"
