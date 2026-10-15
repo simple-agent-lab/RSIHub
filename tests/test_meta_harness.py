@@ -129,8 +129,8 @@ def _ctx(workspace: Path, genid: str, parent: str, config: dict | None = None) -
     )
 
 
-def _rollout(module, monkeypatch, workspace: Path, rows: list[dict], genid: str, parent: str):
-    monkeypatch.setattr(module, "ArchiveView", lambda _workspace: _Archive(rows, {"0", "1"}))
+def _rollout(module, monkeypatch, workspace: Path, rows: list[dict], genid: str, parent: str, certified=("0", "1")):
+    monkeypatch.setattr(module, "ArchiveView", lambda _workspace: _Archive(rows, set(certified)))
     monkeypatch.setattr(module, "_load_collect_cases", lambda _checkout: _collect)
     ctx = _ctx(workspace, genid, parent)
     return ctx, module.MetaHarnessRollout().rollout(ctx.checkout, ctx)
@@ -179,6 +179,23 @@ def test_rollout_reuses_earlier_replays_instead_of_copying_traces_again(tmp_path
     assert index["0"]["per_task"] == {"task-a": 1.0, "task-b": 0.0}
     assert result.summary["candidates_replayed"] == []
     assert not (ctx.run_dir / "rollout" / "candidates" / "gen-0" / "cases.json").exists()
+
+
+def test_rollout_drops_traces_and_best_score_of_candidates_no_longer_certified(tmp_path: Path, monkeypatch) -> None:
+    module = _load("rollout")
+    workspace, rows = _workspace(tmp_path)
+    rows[0]["score"] = 0.9
+    _rollout(module, monkeypatch, workspace, rows, genid="3", parent="1")
+
+    ctx, _result = _rollout(module, monkeypatch, workspace, rows, genid="4", parent="1", certified=("1",))
+
+    store = ctx.run_dir / "rollout" / "candidates"
+    index = {entry["genid"]: entry for entry in json.loads((store / "index.json").read_text())["candidates"]}
+    assert index["0"]["certified"] is False
+    assert not {"cases", "summary", "per_task"} & index["0"].keys()
+    frontier = json.loads((store / "frontier.json").read_text())
+    assert frontier["best"] == {"genid": "1", "score": 0.75}
+    assert frontier["tasks"]["task-a"] == {"reward": 0.0, "candidates": ["1"]}
 
 
 def test_mutate_prompt_points_to_the_candidate_store_and_proposer_rules(tmp_path: Path) -> None:

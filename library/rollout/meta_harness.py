@@ -98,7 +98,7 @@ def _frontier(entries: list[dict[str, Any]]) -> dict[str, Any]:
                 tasks[task] = {"reward": reward, "candidates": [entry["genid"]]}
             elif reward == best["reward"]:
                 best["candidates"].append(entry["genid"])
-    scored = [entry for entry in entries if isinstance(entry.get("score"), (int, float))]
+    scored = [entry for entry in entries if entry.get("certified") and isinstance(entry.get("score"), (int, float))]
     best = max(scored, key=lambda entry: float(entry["score"]), default=None)
     return {
         "best": {"genid": best["genid"], "score": best["score"]} if best else None,
@@ -201,7 +201,7 @@ class MetaHarnessRollout(RolloutOperator):
                 entry["cases"] = _relative(ctx.workspace, rollout_dir / "cases.json")
                 entry["summary"] = case_summary(cases)
                 entry["per_task"] = _per_task(cases)
-            elif genid in prior:
+            elif genid in certified and genid in prior:
                 for key in ("cases", "summary", "per_task"):
                     if key in prior[genid]:
                         entry[key] = prior[genid][key]
