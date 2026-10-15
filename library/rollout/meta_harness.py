@@ -64,6 +64,13 @@ def _prior_entries(workspace: Path, current_run: Path) -> dict[str, dict[str, An
     return entries
 
 
+def _reusable(prior: dict[str, Any] | None, row: dict[str, Any]) -> bool:
+    """A prior replay is reusable only if it replayed the artifact the row certifies now."""
+    reference = row.get("artifacts")
+    digest = reference.get("sha256") if isinstance(reference, dict) else None
+    return prior is not None and isinstance(digest, str) and prior.get("artifact_sha256") == digest
+
+
 def _per_task(cases: list[dict[str, Any]]) -> dict[str, float]:
     rewards: dict[str, list[float]] = defaultdict(list)
     for case in cases:
@@ -201,26 +208,34 @@ class MetaHarnessRollout(RolloutOperator):
                 entry["cases"] = _relative(ctx.workspace, rollout_dir / "cases.json")
                 entry["summary"] = case_summary(cases)
                 entry["per_task"] = _per_task(cases)
-            elif genid in certified and genid in prior:
-                for key in ("cases", "summary", "per_task"):
+                entry["artifact_sha256"] = artifact.sha256
+            elif genid in certified and _reusable(prior.get(genid), row):
+                for key in ("cases", "summary", "per_task", "artifact_sha256"):
                     if key in prior[genid]:
                         entry[key] = prior[genid][key]
             elif genid in certified:
                 destination = store / f"gen-{genid}"
-                candidate_cases, _jobs, _artifact = replay_certified_cases(
-                    workspace=ctx.workspace,
-                    genid=genid,
-                    row=row,
-                    load_collector=load_collector,
-                    destination=destination,
-                    field_limit=field_limit,
-                    pass_threshold=pass_threshold,
-                )
-                _write_json(destination / "cases.json", candidate_cases)
-                entry["cases"] = _relative(ctx.workspace, destination / "cases.json")
-                entry["summary"] = case_summary(candidate_cases) if candidate_cases else {}
-                entry["per_task"] = _per_task(candidate_cases)
-                replayed.append(genid)
+                try:
+                    candidate_cases, _jobs, candidate_artifact = replay_certified_cases(
+                        workspace=ctx.workspace,
+                        genid=genid,
+                        row=row,
+                        load_collector=load_collector,
+                        destination=destination,
+                        field_limit=field_limit,
+                        pass_threshold=pass_threshold,
+                    )
+                except SystemExit as error:
+                    # Only the selected parent's replay is load-bearing; one unreadable historical
+                    # candidate must not block every later generation.
+                    entry["replay_error"] = str(error.code)
+                else:
+                    _write_json(destination / "cases.json", candidate_cases)
+                    entry["cases"] = _relative(ctx.workspace, destination / "cases.json")
+                    entry["summary"] = case_summary(candidate_cases) if candidate_cases else {}
+                    entry["per_task"] = _per_task(candidate_cases)
+                    entry["artifact_sha256"] = candidate_artifact.sha256
+                    replayed.append(genid)
             tag = str(row.get("tag") or "") or None
             parent_tag = str(by_id.get(str(row.get("parent")), {}).get("tag") or "") or None
             for key, base in (("diff_vs_parent", parent_tag), ("diff_vs_seed", seed_tag or None)):

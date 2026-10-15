@@ -2,6 +2,7 @@ import hashlib
 import importlib.util
 import json
 import random
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -196,6 +197,41 @@ def test_rollout_drops_traces_and_best_score_of_candidates_no_longer_certified(t
     frontier = json.loads((store / "frontier.json").read_text())
     assert frontier["best"] == {"genid": "1", "score": 0.75}
     assert frontier["tasks"]["task-a"] == {"reward": 0.0, "candidates": ["1"]}
+
+
+def test_rollout_replays_again_when_the_certified_artifact_changes(tmp_path: Path, monkeypatch) -> None:
+    module = _load("rollout")
+    workspace, rows = _workspace(tmp_path)
+    _rollout(module, monkeypatch, workspace, rows, genid="3", parent="1")
+    shutil.rmtree(workspace / "runs" / "evaluations" / "candidate" / "gen-0")
+    rows[0]["artifacts"] = _artifact(workspace, "0", {"task-a": 0.5, "task-b": 0.5})
+
+    ctx, result = _rollout(module, monkeypatch, workspace, rows, genid="4", parent="1")
+
+    index = {
+        entry["genid"]: entry
+        for entry in json.loads((ctx.run_dir / "rollout" / "candidates" / "index.json").read_text())["candidates"]
+    }
+    assert result.summary["candidates_replayed"] == ["0"]
+    assert index["0"]["cases"] == "runs/gen-4/rollout/candidates/gen-0/cases.json"
+    assert index["0"]["per_task"] == {"task-a": 0.5, "task-b": 0.5}
+
+
+def test_rollout_records_a_historical_replay_failure_and_continues(tmp_path: Path, monkeypatch) -> None:
+    module = _load("rollout")
+    workspace, rows = _workspace(tmp_path)
+    (workspace / rows[0]["artifacts"]["path"]).write_text("{}")
+
+    ctx, result = _rollout(module, monkeypatch, workspace, rows, genid="3", parent="1")
+
+    index = {
+        entry["genid"]: entry
+        for entry in json.loads((ctx.run_dir / "rollout" / "candidates" / "index.json").read_text())["candidates"]
+    }
+    assert index["0"]["replay_error"]
+    assert "cases" not in index["0"]
+    assert index["1"]["cases"] == "runs/gen-3/rollout/cases.json"
+    assert result.summary["candidates_replayed"] == []
 
 
 def test_mutate_prompt_points_to_the_candidate_store_and_proposer_rules(tmp_path: Path) -> None:

@@ -57,7 +57,9 @@ docker build --build-arg CODEX_VERSION=0.146.0 \
   evaluation. RSIHub's guardrail and canonical evaluation already reject
   candidates that fail to install or run.
 - Traces exist only for certified candidates. A candidate whose evaluation was
-  not certified is listed with its code and status but no traces.
+  not certified is listed with its code and status but no traces. A certified
+  candidate whose replay fails verification is listed with a `replay_error`;
+  only the selected parent's replay is required to succeed.
 
 ## Operator Routing
 
