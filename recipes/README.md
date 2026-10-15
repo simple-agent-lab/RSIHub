@@ -17,6 +17,7 @@ represents.
 - [HyperAgents for DeepSeek Harness](hyperagents_dsh/README.md)
 - [HyperAgents on full Terminal-Bench 2.0](hyperagents_tbench_full/README.md)
 - [HyperAgents for Codex on full Terminal-Bench 2.0](hyperagents_codex_tbench_full/README.md)
+- [Meta-Harness](meta_harness/README.md)
 
 Main recipes use the shared, content-pinned Terminal-Bench 2.0 subset, except
 the two `*_tbench_full` profiles, which freeze all 89 official tasks. The setup

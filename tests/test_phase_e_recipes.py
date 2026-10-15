@@ -18,8 +18,9 @@ SUPPORTED_RECIPES = {
     "hyperagents_codex_tbench_full",
     "hyperagents_dsh",
     "hyperagents_tbench_full",
+    "meta_harness",
 }
-UV_SOURCE_RECIPES = {"ahe", "hill_climb", "hyperagents", "hyperagents_tbench_full"}
+UV_SOURCE_RECIPES = {"ahe", "hill_climb", "hyperagents", "hyperagents_tbench_full", "meta_harness"}
 LOCAL_MUTATE_RECIPES = {"hyperagents_dsh"}
 MAIN_RECIPES = SUPPORTED_RECIPES - {"gepa_local"}
 TERMINAL_BENCH_DATASET = "terminal-bench-2-30-v1"
@@ -189,6 +190,14 @@ def test_supported_recipes_use_harbor_and_method_mutate() -> None:
             "gate": "parent_eligible",
             "record": "hyperagents",
         },
+        "meta_harness": {
+            "select": "greedy",
+            "rollout": "meta_harness",
+            "analyze": "trace_browser",
+            "mutate": "meta_harness",
+            "gate": "parent_eligible",
+            "record": "jsonl",
+        },
     }
     for name in SUPPORTED_RECIPES:
         resolved = resolve_builtin_recipe(name)
@@ -215,7 +224,7 @@ def test_supported_recipes_use_harbor_and_method_mutate() -> None:
             assert config["target"]["seed"] == "builtin-local-smoke"
             assert resolved.operators["validate"].config["criterion"] == "non_decreasing"
             assert mutate["agent"] == "evolve.integrations.harbor.local_auto_agent:LocalAutoAgent"
-        elif name in {"ahe", "hyperagents", "hyperagents_tbench_full"}:
+        elif name in {"ahe", "hyperagents", "hyperagents_tbench_full", "meta_harness"}:
             assert config["target"]["revision"] == "388da74aad620a384ab47669b17c52133e30e7c3"
             assert mutate["agent"] == (
                 "evolve.integrations.harbor.miniswe_task_file:InstalledMiniSweAgent"
@@ -243,6 +252,7 @@ def test_terminal_bench_method_recipes_use_full_curated_dataset() -> None:
         "hyperagents": TERMINAL_BENCH_DATASET,
         "hyperagents_codex": TERMINAL_BENCH_DATASET,
         "hyperagents_dsh": TERMINAL_BENCH_DATASET,
+        "meta_harness": TERMINAL_BENCH_DATASET,
     }
     for name, expected_dataset in expected_datasets.items():
         recipe = _parsed_config(name)
@@ -318,7 +328,7 @@ def test_supported_uv_recipes_enable_inline_candidate_runtime_and_task_retry() -
 
 
 def test_shared_optimization_recipes_use_native_candidate_agent_timeout() -> None:
-    for name in ("ahe", "hyperagents", "hyperagents_tbench_full"):
+    for name in ("ahe", "hyperagents", "hyperagents_tbench_full", "meta_harness"):
         evaluator = _parsed_config(name)["evaluator"]
         assert isinstance(evaluator, dict)
         assert evaluator["agent_timeout_multiplier"] == 1
@@ -344,7 +354,7 @@ def test_all_explicit_recipe_retry_and_multiplier_values_are_one() -> None:
 
 def test_miniswe_targets_and_codex_mutators_use_the_benchmark_models() -> None:
     expected_model = "openai/gpt-5.4-2026-03-05"
-    for name in ("ahe", "hyperagents"):
+    for name in ("ahe", "hyperagents", "meta_harness"):
         config = _parsed_config(name)
         mutate = _operator_config(name, "mutate")
         assert mutate["model"] == "gpt-5.4"
@@ -476,6 +486,7 @@ def test_recipe_retry_and_partial_floor_defaults_remain_method_specific() -> Non
         "hyperagents_codex_tbench_full",
         "hyperagents_dsh",
         "hyperagents_tbench_full",
+        "meta_harness",
     ):
         evaluator = _parsed_config(name)["evaluator"]
         assert evaluator["max_retries"] == 1

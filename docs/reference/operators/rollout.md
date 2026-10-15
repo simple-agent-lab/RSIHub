@@ -19,6 +19,7 @@ The result contains a summary and artifact paths.
 | --- | --- |
 | `harbor` | run a bounded train batch through Harbor and normalize trajectories, verifier output, usage, and failures |
 | `parent_evaluation` | expose sanitized, certified evaluation evidence already attached to the selected parent |
+| `meta_harness` | replay the selected parent like `parent_evaluation`, plus a store of every prior candidate's code, scores, and certified traces |
 | `failure_focused` | select failure-oriented training/evaluation metadata |
 | `noop` | emit empty rollout evidence for controlled tests |
 
