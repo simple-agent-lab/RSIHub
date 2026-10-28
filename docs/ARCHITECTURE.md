@@ -37,7 +37,7 @@ decision (and usually a demolition pass) instead of silent sprawl.
 | `candidate/harbor_smoke.py` | 125 | audit Harbor job/task artifacts so process-level success cannot hide trial failures |
 | `candidate/smoke.py` | 225 | run install or one-request model smoke against an exact candidate snapshot and persist redacted evidence |
 | `candidate/execution.py` | 125 | execute verified independent packages through the isolated runtime and retain host-owned execution receipts |
-| `candidate/package.py` | 225 | export exact target-only Git snapshots and materialize digest-pinned candidate packages without research or evaluator files |
+| `candidate/package.py` | 225 | preserve filesystem filename bytes in exact target-only snapshots and digest-pinned packages without research or evaluator files |
 | `candidate/snapshot.py` | 100 | exact candidate Git tree construction, temporary materialization, and reviewed-tree commit verification |
 | `cli.py` | 550 | argument parsing and verb dispatch only — no logic |
 | `composition/__init__.py` | 25 | stable recipe-resolution facade without CLI dependencies |
@@ -97,7 +97,7 @@ decision (and usually a demolition pass) instead of silent sprawl.
 | `surface.py` | 150 | mutable-surface pattern matching and violation checks |
 | `trace_analysis.py` | 775 | deterministic shared transforms used by the independent analyze operator variants |
 | `workspace.py` | 1100 | `evolve init` scaffolding: file copies, composition materialization, deterministic dataset and Harbor runtime config, protocol stamping, safe seed + mechanism vendoring, inner-skill copy |
-| `git.py` | 150 | thin git subprocess helpers — nothing evolve-specific |
+| `git.py` | 150 | thin git subprocess helpers and byte-preserving NUL-delimited path parsing — nothing evolve-specific |
 | `harbor_local.py` | 250 | minimal in-place Harbor environment for fast trials against a pre-configured local agent runtime |
 | `host_runtime.py` | 100 | host-side locked runtime process helpers |
 | `integrations/__init__.py` | 10 | external runtime integration package boundary |

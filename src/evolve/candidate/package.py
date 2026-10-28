@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -40,7 +41,7 @@ def _publish(destination: Path, files: dict[str, tuple[bytes, int]]) -> None:
 
 
 def export_candidate(workspace: Path, reference: str, destination: Path) -> dict[str, Any]:
-    """Export committed target bytes, never a working tree, Git metadata or runs/."""
+    """Export committed target bytes and filesystem names, never working-tree or research state."""
     workspace = workspace.resolve()
     commit = git_stdout(workspace, "rev-parse", "--verify", "--end-of-options", f"{reference}^{{commit}}")
     tree = git_stdout(workspace, "rev-parse", f"{commit}:target")
@@ -54,7 +55,7 @@ def export_candidate(workspace: Path, reference: str, destination: Path) -> dict
         mode, kind, object_id = metadata.split()
         if kind != b"blob" or mode not in {b"100644", b"100755"}:
             raise RuntimeError("candidate export rejects symlinks, submodules and special files")
-        name = raw_name.decode("utf-8")
+        name = os.fsdecode(raw_name)
         _validate_name(name)
         data = subprocess.run(
             ["git", "-C", str(workspace), "cat-file", "blob", object_id.decode("ascii")],

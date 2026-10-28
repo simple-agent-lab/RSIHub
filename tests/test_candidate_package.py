@@ -2,12 +2,15 @@ import hashlib
 import json
 import os
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 from conftest import git
 
 from evolve.candidate.package import export_candidate, materialize_candidate
+from evolve.candidate.snapshot import build_candidate_snapshot, commit_candidate_snapshot
 from evolve.cli import app
 
 
@@ -108,3 +111,51 @@ def test_candidate_export_cli(tmp_path: Path) -> None:
     receipt = json.loads(result.output)
     assert len(receipt["sha256"]) == 64
     assert receipt["path"] == str(tmp_path / "package")
+
+
+def test_export_preserves_non_utf8_git_name_in_manifest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Validate real Git byte names without requiring filesystem support for them."""
+    repo = _repo(tmp_path / "repo")
+    raw_name = b"policy-\xff.sh"
+    blob = git(repo, "rev-parse", "HEAD:target/run.sh").encode("ascii")
+    target_tree = subprocess.run(
+        ["git", "-C", str(repo), "mktree", "-z"],
+        input=b"100755 blob " + blob + b"\t" + raw_name + b"\0",
+        capture_output=True,
+        check=True,
+    ).stdout.strip()
+    tree = subprocess.run(
+        ["git", "-C", str(repo), "mktree", "-z"],
+        input=b"040000 tree " + target_tree + b"\ttarget\0",
+        capture_output=True,
+        check=True,
+    ).stdout.strip()
+    commit = git(repo, "commit-tree", tree.decode("ascii"), "-p", "HEAD", "-m", "raw filename")
+    published: dict[str, tuple[bytes, int]] = {}
+    monkeypatch.setattr("evolve.candidate.package._publish", lambda _destination, files: published.update(files))
+
+    receipt = export_candidate(repo, commit, tmp_path / "package")
+
+    assert os.fsencode(next(iter(receipt["files"]))) == raw_name
+    encoded = published["manifest.json"][0]
+    assert b"\\udcff" in encoded
+    assert json.loads(encoded)["files"] == receipt["files"]
+    assert published[f"target/{os.fsdecode(raw_name)}"] == (b"#!/bin/sh\necho safe\n", 0o700)
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="non-UTF-8 filesystem names require Linux")
+def test_non_utf8_name_survives_snapshot_export_and_materialization(tmp_path: Path) -> None:
+    """Round-trip a byte filename through the complete candidate delivery path."""
+    repo = _repo(tmp_path / "repo")
+    name = os.fsdecode(b"policy-\xff.md")
+    (repo / "target" / name).write_bytes(b"candidate policy\n")
+    snapshot = build_candidate_snapshot(repo, "gen/0", include=["target/**"], exclude=[])
+    commit = commit_candidate_snapshot(repo, snapshot, "candidate byte filename")
+    package = tmp_path / "package"
+
+    receipt = export_candidate(repo, commit, package)
+    manifest = materialize_candidate(package, receipt["sha256"], tmp_path / "installed")
+
+    assert name in manifest["files"]
+    assert manifest["files"] == receipt["files"]
+    assert (tmp_path / "installed" / name).read_bytes() == b"candidate policy\n"

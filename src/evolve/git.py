@@ -11,16 +11,21 @@ def git(
     *args: str,
     check: bool = True,
     env: dict[str, str] | None = None,
+    path_output: bool = False,
 ) -> subprocess.CompletedProcess[str]:
+    """Run Git, optionally preserving verbatim paths with filesystem decoding."""
     executable = shutil.which("git")
     if executable is None:
         raise RuntimeError("git is required")
-    result = subprocess.run(
+    process = subprocess.run(
         [executable, "-C", str(workspace), *args],
-        text=True,
+        text=not path_output,
         capture_output=True,
         check=False,
         env=None if env is None else {**os.environ, **env},
+    )
+    result = subprocess.CompletedProcess(
+        process.args, process.returncode, os.fsdecode(process.stdout), os.fsdecode(process.stderr)
     )
     if check and result.returncode != 0:
         message = result.stderr.strip() or result.stdout.strip() or "git command failed"
@@ -55,13 +60,15 @@ def tag_exists(workspace: Path, tag: str) -> bool:
 
 
 def changed_paths(workspace: Path, parent_tag: str, child_tag: str) -> list[str]:
-    output = git_stdout(workspace, "diff", "--name-only", parent_tag, child_tag)
-    return [line for line in output.splitlines() if line]
+    """Return committed paths without quoting, newline translation, or byte loss."""
+    output = git(workspace, "diff", "--name-only", "-z", parent_tag, child_tag, path_output=True).stdout
+    return [path for path in output.split("\0") if path]
 
 
 def working_tree_changed_paths(worktree: Path, parent_tag: str) -> list[str]:
-    tracked = git_stdout(worktree, "diff", "--name-only", parent_tag, "--")
-    paths = [line for line in tracked.splitlines() if line]
+    """Combine tracked and dirty paths while preserving filesystem names."""
+    tracked = git(worktree, "diff", "--name-only", "-z", parent_tag, "--", path_output=True).stdout
+    paths = [path for path in tracked.split("\0") if path]
     for path in dirty_paths(worktree):
         if path not in paths:
             paths.append(path)
@@ -83,15 +90,16 @@ def create_tag(workspace: Path, tag: str) -> None:
 
 
 def dirty_paths(workspace: Path) -> list[str]:
-    output = git(workspace, "status", "--porcelain").stdout
+    """Return dirty destination paths, skipping separate rename/copy sources."""
+    output = git(workspace, "status", "--porcelain", "-z", path_output=True).stdout
+    records = iter(output.split("\0"))
     paths: list[str] = []
-    for line in output.splitlines():
-        if not line:
+    for record in records:
+        if not record:
             continue
-        path = line[3:]
-        if " -> " in path:
-            path = path.rsplit(" -> ", 1)[1]
-        paths.append(path)
+        paths.append(record[3:])
+        if any(status in "RC" for status in record[:2]):
+            next(records)  # NUL-delimited renames/copies put the source in a separate record.
     return paths
 
 
