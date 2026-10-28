@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from evolve.frozen.interfaces import OperatorContext
+from library.rollout._support import certified_replay
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -545,7 +546,7 @@ def test_replay_uses_verified_index_snapshot_when_index_mutates_after_validation
     _jobs, reference = _artifact(workspace)
     artifact = workspace / reference["path"]
     rows = {"3": {"genid": "3", "artifacts": reference, "score": 1.0}}
-    real_sources = module._artifact_sources
+    real_sources = certified_replay._artifact_sources
 
     def mutate_after_sources(*args, **kwargs):
         sources = real_sources(*args, **kwargs)
@@ -566,7 +567,7 @@ def test_replay_uses_verified_index_snapshot_when_index_mutates_after_validation
         ]
 
     monkeypatch.setattr(module, "ArchiveView", lambda _workspace: _Archive(rows))
-    monkeypatch.setattr(module, "_artifact_sources", mutate_after_sources)
+    monkeypatch.setattr(certified_replay, "_artifact_sources", mutate_after_sources)
     monkeypatch.setattr(module, "_load_collect_cases", lambda _checkout: collect)
     ctx = _context(workspace, parent="3")
 

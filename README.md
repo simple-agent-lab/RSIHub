@@ -183,6 +183,7 @@ catalogs, remote (DevBox) tunnels, Harbor inspection, and troubleshooting.
 | engineer the agent harness against evaluator feedback | `ahe` | target |
 | balance multiple objectives with minibatch validation | `gepa` | prompt and task skill |
 | co-evolve the target and selected evolution policy | `hyperagents` | target and selected operators |
+| search the harness with full access to every prior candidate's code, scores, and traces | `meta_harness` | target |
 
 See [the recipe guide](recipes/README.md) for each strategy’s workflow and configuration.
 

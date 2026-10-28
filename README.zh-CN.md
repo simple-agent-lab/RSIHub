@@ -160,6 +160,7 @@ catalog、远程（DevBox）隧道、Harbor 深入排查与常见问题见
 | 依据 evaluator 反馈打磨 agent harness | `ahe` | target |
 | 用 minibatch 验证平衡多个目标 | `gepa` | prompt 与 task skill |
 | 让 target 与被选中的演化策略协同演化 | `hyperagents` | target 与被选中的 operator |
+| 让提议者完整读取所有历史候选的代码、分数和轨迹来搜索 harness | `meta_harness` | target |
 
 各策略的工作流与配置见 [recipe 指南](recipes/README.md)。
 

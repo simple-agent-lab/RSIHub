@@ -16,6 +16,7 @@ SUPPORTED = {
     "hyperagents_codex_tbench_full",
     "hyperagents_dsh",
     "hyperagents_tbench_full",
+    "meta_harness",
 }
 
 

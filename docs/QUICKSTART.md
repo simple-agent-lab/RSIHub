@@ -28,7 +28,7 @@ RECIPE=ahe
 ```
 
 Supported values are `aevolve`, `ahe`, `ahe_codex`, `gepa`, `hill_climb`,
-`hill_climb_codex`, `hyperagents`, `hyperagents_codex`, and
+`hill_climb_codex`, `hyperagents`, `hyperagents_codex`, `meta_harness`, and
 `hyperagents_dsh` (see its
 [recipe README](https://github.com/simple-agent-lab/RSIHub/blob/main/recipes/hyperagents_dsh/README.md)
 for the extra dsh SDK setup and the pre-experiment checklist: model pin / `gen/0`

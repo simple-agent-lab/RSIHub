@@ -39,6 +39,7 @@ CASES = {
     "hill_climb_codex": ("codex", "target.agent:HarborAgent", "codex"),
     "hyperagents_codex": ("codex", "target.agent:HarborAgent", "codex"),
     "hyperagents_codex_tbench_full": ("codex", "target.agent:HarborAgent", "codex"),
+    "meta_harness": ("external", CANDIDATE, "codex"),
 }
 MINISWE_REVISION = "388da74aad620a384ab47669b17c52133e30e7c3"
 

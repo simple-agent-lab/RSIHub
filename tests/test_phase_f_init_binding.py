@@ -41,7 +41,7 @@ def test_mutate_runners_are_not_operator_variants(tmp_path: Path) -> None:
     from evolve.composition.catalog import discover_operators
 
     variants = sorted(name for stage, name in discover_operators() if stage == "mutate")
-    assert variants == ["aevolve", "ahe", "gepa", "hyperagents"]
+    assert variants == ["aevolve", "ahe", "gepa", "hyperagents", "meta_harness"]
     assert "local" not in variants
     assert "harbor" not in variants
 
